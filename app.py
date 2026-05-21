@@ -2,6 +2,8 @@ from flask import Flask, request
 
 app = Flask(__name__)
 
+ultima_senal = "NINGUNA"
+
 @app.route("/")
 def home():
     return "CAZADOR API ONLINE"
@@ -9,11 +11,20 @@ def home():
 @app.route("/webhook", methods=["POST"])
 def webhook():
 
+    global ultima_senal
+
     data = request.json
+
+    ultima_senal = data["action"]
 
     print(data)
 
-    return f"SEÑAL RECIBIDA: {data}"
+    return f"SEÑAL RECIBIDA: {ultima_senal}"
+
+@app.route("/estado")
+def estado():
+
+    return f"ULTIMA SEÑAL: {ultima_senal}"
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
