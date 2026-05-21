@@ -13,7 +13,7 @@ def webhook():
 
     print(data)
 
-    return "SEÑAL RECIBIDA"
+    return f"SEÑAL RECIBIDA: {data}"
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
