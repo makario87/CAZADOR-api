@@ -6,6 +6,10 @@ app = Flask(__name__)
 def home():
     return "CAZADOR API ONLINE"
 
+@app.route("/webhook")
+def webhook():
+    return "WEBHOOK RECIBIDO"
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
     
