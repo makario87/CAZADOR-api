@@ -8,8 +8,13 @@ ultima_senal = "NINGUNA"
 def home():
 
     return f"""
-    <h1>CAZADOR API ONLINE</h1>
+    <h1>🔥 CAZADOR API ONLINE 🔥</h1>
+
     <h2>ULTIMA SEÑAL: {ultima_senal}</h2>
+
+    <hr>
+
+    <h3>SERVIDOR ACTIVO</h3>
     """
 
 @app.route("/webhook", methods=["POST"])
