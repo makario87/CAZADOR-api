@@ -6,7 +6,11 @@ ultima_senal = "NINGUNA"
 
 @app.route("/")
 def home():
-    return "CAZADOR API ONLINE"
+
+    return f"""
+    <h1>CAZADOR API ONLINE</h1>
+    <h2>ULTIMA SEÑAL: {ultima_senal}</h2>
+    """
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
