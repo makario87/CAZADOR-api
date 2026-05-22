@@ -1,30 +1,35 @@
 """
 utils/auth.py
-Validación del token secreto del webhook.
-TradingView debe mandar el token en el header: X-Webhook-Token
 """
 import hmac
-import hashlib
 from config.settings import WEBHOOK_SECRET_TOKEN
 from logs.logger import get_logger
 
 logger = get_logger(__name__)
 
-def validate_webhook_token(request) -> bool:
+def validate_webhook_token(request, payload: dict = None) -> bool:
     """
-    Valida que la petición viene de TradingView con el token correcto.
-    El token debe venir en el header: X-Webhook-Token
+    Busca el token en dos sitios:
+    1. Header: X-Webhook-Token
+    2. Body JSON: campo "token"
     """
-    token = request.headers.get("X-Webhook-Token", "")
+
+    # Opción 1 — header
+    token = request.headers.get("X-Webhook-Token", "").strip()
+
+    # Opción 2 — body JSON
+    if not token and payload:
+        token = payload.get("token", "").strip()
 
     if not token:
-        logger.warning("⚠️ Webhook recibido sin token de autenticación")
+        logger.warning("⚠️ Webhook recibido sin token")
+        logger.warning(f"⚠️ Headers disponibles: {list(request.headers.keys())}")
+        logger.warning(f"⚠️ Payload recibido: {payload}")
         return False
 
-    # Comparación segura anti timing-attack
-    valid = hmac.compare_digest(token.strip(), WEBHOOK_SECRET_TOKEN.strip())
+    valid = hmac.compare_digest(token, WEBHOOK_SECRET_TOKEN.strip())
 
     if not valid:
-        logger.warning("🚨 Token de webhook inválido — posible intento no autorizado")
+        logger.warning(f"🚨 Token inválido recibido: {token[:8]}...")
 
     return valid
