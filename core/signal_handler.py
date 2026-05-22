@@ -5,7 +5,7 @@ TradingView es el cerebro. Python es el ejecutor.
 """
 import time
 from brokers.bingx import place_order, close_all_positions
-from data.state import get_state, update_state
+from data.state import get_state, update_state, update_position
 from core.emergency import trigger_emergency
 from config.settings import GIRO_BUFFER_SECONDS, DEMO_MODE
 from logs.logger import get_logger
@@ -105,6 +105,7 @@ def _entry_long(symbol: str, qty: float, payload: dict = None) -> dict:
     )
 
     update_state({"last_signal": "ENTRY_LONG", "symbol": symbol})
+    update_position(symbol, has_long=True, has_short=False)
 
     return {
         "status": "ok",
@@ -128,6 +129,7 @@ def _entry_short(symbol: str, qty: float, payload: dict = None) -> dict:
     )
 
     update_state({"last_signal": "ENTRY_SHORT", "symbol": symbol})
+    update_position(symbol, has_long=False, has_short=True)
 
     return {
         "status": "ok",
@@ -154,6 +156,7 @@ def _close_long(symbol: str, payload: dict = None) -> dict:
     )
 
     update_state({"last_signal": "CLOSE_LONG", "symbol": symbol})
+    update_position(symbol, has_long=False, has_short=False)
 
     return {
         "status": "ok",
@@ -177,6 +180,7 @@ def _close_short(symbol: str, payload: dict = None) -> dict:
     )
 
     update_state({"last_signal": "CLOSE_SHORT", "symbol": symbol})
+    update_position(symbol, has_long=False, has_short=False)
 
     return {
         "status": "ok",
@@ -220,6 +224,7 @@ def _giro_long(symbol: str, qty: float, payload: dict) -> dict:
     )
     
     update_state({"last_signal": "GIRO_LONG", "symbol": symbol})
+    update_position(symbol, has_long=True, has_short=False)
     return {"status": "ok", "action": "GIRO_LONG", "close": result_close, "open": result_open}
 
 
@@ -255,6 +260,7 @@ def _giro_short(symbol: str, qty: float, payload: dict) -> dict:
     )
     
     update_state({"last_signal": "GIRO_SHORT", "symbol": symbol})
+    update_position(symbol, has_long=False, has_short=True)
     return {"status": "ok", "action": "GIRO_SHORT", "close": result_close, "open": result_open}
 
 # ============================================================
@@ -276,6 +282,7 @@ def _sl_long(symbol: str, signal: str, payload: dict = None) -> dict:
     )
 
     update_state({"last_signal": signal, "symbol": symbol})
+    update_position(symbol, has_long=False, has_short=False)
 
     return {
         "status": "ok",
@@ -299,6 +306,7 @@ def _sl_short(symbol: str, signal: str, payload: dict = None) -> dict:
     )
 
     update_state({"last_signal": signal, "symbol": symbol})
+    update_position(symbol, has_long=False, has_short=False)
 
     return {
         "status": "ok",
