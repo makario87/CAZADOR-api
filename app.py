@@ -24,7 +24,7 @@ def webhook():
 
     data = request.json
 
-    ultima_senal = data["side"]
+    ultima_senal = data["signal"]
 
     print(data)
 
