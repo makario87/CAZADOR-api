@@ -9,6 +9,7 @@ from data.state import get_state, update_state
 from core.emergency import trigger_emergency
 from config.settings import GIRO_BUFFER_SECONDS, DEMO_MODE
 from logs.logger import get_logger
+from data.trade_log import log_trade
 
 logger = get_logger(__name__)
 
@@ -55,16 +56,16 @@ def handle_signal(payload: dict) -> dict:
     # Dispatcher
     try:
         if signal == "ENTRY_LONG":
-            return _entry_long(symbol, qty)
+            return _entry_long(symbol, qty, payload)
 
         elif signal == "ENTRY_SHORT":
-            return _entry_short(symbol, qty)
+            return _entry_short(symbol, qty, payload)
 
         elif signal == "CLOSE_LONG":
-            return _close_long(symbol)
+            return _close_long(symbol, payload)
 
         elif signal == "CLOSE_SHORT":
-            return _close_short(symbol)
+            return _close_short(symbol, payload)
 
         elif signal == "GIRO_LONG":
             return _giro_long(symbol, qty, payload)
@@ -73,10 +74,10 @@ def handle_signal(payload: dict) -> dict:
             return _giro_short(symbol, qty, payload)
 
         elif signal.startswith("SL_LONG"):
-            return _sl_long(symbol, signal)
+            return _sl_long(symbol, signal, payload)
 
         elif signal.startswith("SL_SHORT"):
-            return _sl_short(symbol, signal)
+            return _sl_short(symbol, signal, payload)
 
     except Exception as e:
         logger.error(f"❌ Error ejecutando señal {signal}: {e}")
@@ -88,32 +89,100 @@ def handle_signal(payload: dict) -> dict:
 # ============================================================
 # 📈 ENTRADAS
 # ============================================================
-def _entry_long(symbol: str, qty: float) -> dict:
+def _entry_long(symbol: str, qty: float, payload: dict = None) -> dict:
     logger.info(f"🟢 ENTRY_LONG {symbol} qty={qty}")
-    result = place_order(symbol, "BUY", qty, "LONG")
-    update_state({"last_signal": "ENTRY_LONG", "symbol": symbol})
-    return {"status": "ok", "action": "ENTRY_LONG", "result": result}
 
-def _entry_short(symbol: str, qty: float) -> dict:
+    result = place_order(symbol, "BUY", qty, "LONG")
+
+    log_trade(
+        signal = "ENTRY_LONG",
+        symbol = symbol,
+        qty    = qty,
+        price  = payload.get("price", "0") if payload else "0",
+        result = result,
+        robot  = payload.get("robot", "CAZADOR") if payload else "CAZADOR",
+        demo   = DEMO_MODE,
+    )
+
+    update_state({"last_signal": "ENTRY_LONG", "symbol": symbol})
+
+    return {
+        "status": "ok",
+        "action": "ENTRY_LONG",
+        "result": result
+    }
+
+def _entry_short(symbol: str, qty: float, payload: dict = None) -> dict:
     logger.info(f"🔴 ENTRY_SHORT {symbol} qty={qty}")
+
     result = place_order(symbol, "SELL", qty, "SHORT")
+
+    log_trade(
+        signal = "ENTRY_SHORT",
+        symbol = symbol,
+        qty    = qty,
+        price  = payload.get("price", "0") if payload else "0",
+        result = result,
+        robot  = payload.get("robot", "CAZADOR") if payload else "CAZADOR",
+        demo   = DEMO_MODE,
+    )
+
     update_state({"last_signal": "ENTRY_SHORT", "symbol": symbol})
-    return {"status": "ok", "action": "ENTRY_SHORT", "result": result}
+
+    return {
+        "status": "ok",
+        "action": "ENTRY_SHORT",
+        "result": result
+    }
 
 # ============================================================
 # 📉 CIERRES
 # ============================================================
-def _close_long(symbol: str) -> dict:
+def _close_long(symbol: str, payload: dict = None) -> dict:
     logger.info(f"⬜ CLOSE_LONG {symbol}")
-    result = close_all_positions(symbol, "LONG")
-    update_state({"last_signal": "CLOSE_LONG", "symbol": symbol})
-    return {"status": "ok", "action": "CLOSE_LONG", "result": result}
 
-def _close_short(symbol: str) -> dict:
+    result = close_all_positions(symbol, "LONG")
+
+    log_trade(
+        signal = "CLOSE_LONG",
+        symbol = symbol,
+        qty    = 0,
+        price  = payload.get("price", "0") if payload else "0",
+        result = result,
+        robot  = payload.get("robot", "CAZADOR") if payload else "CAZADOR",
+        demo   = DEMO_MODE,
+    )
+
+    update_state({"last_signal": "CLOSE_LONG", "symbol": symbol})
+
+    return {
+        "status": "ok",
+        "action": "CLOSE_LONG",
+        "result": result
+    }
+
+def _close_short(symbol: str, payload: dict = None) -> dict:
     logger.info(f"⬜ CLOSE_SHORT {symbol}")
+
     result = close_all_positions(symbol, "SHORT")
+
+    log_trade(
+        signal = "CLOSE_SHORT",
+        symbol = symbol,
+        qty    = 0,
+        price  = payload.get("price", "0") if payload else "0",
+        result = result,
+        robot  = payload.get("robot", "CAZADOR") if payload else "CAZADOR",
+        demo   = DEMO_MODE,
+    )
+
     update_state({"last_signal": "CLOSE_SHORT", "symbol": symbol})
-    return {"status": "ok", "action": "CLOSE_SHORT", "result": result}
+
+    return {
+        "status": "ok",
+        "action": "CLOSE_SHORT",
+        "result": result
+    }
 
 # ============================================================
 # 🔄 GIROS
@@ -130,6 +199,26 @@ def _giro_long(symbol: str, qty: float, payload: dict) -> dict:
     time.sleep(GIRO_BUFFER_SECONDS)
     result_open  = place_order(symbol, "BUY", qty_open, "LONG")
     
+    log_trade(
+        signal = "GIRO_LONG_CLOSE",
+        symbol = symbol,
+        qty    = qty_close,
+        price  = payload.get("price", "0"),
+        result = result_close,
+        robot  = payload.get("robot", "CAZADOR"),
+        demo   = DEMO_MODE,
+    )
+    
+    log_trade(
+        signal = "GIRO_LONG_OPEN",
+        symbol = symbol,
+        qty    = qty_open,
+        price  = payload.get("price", "0"),
+        result = result_open,
+        robot  = payload.get("robot", "CAZADOR"),
+        demo   = DEMO_MODE,
+    )
+    
     update_state({"last_signal": "GIRO_LONG", "symbol": symbol})
     return {"status": "ok", "action": "GIRO_LONG", "close": result_close, "open": result_open}
 
@@ -145,6 +234,25 @@ def _giro_short(symbol: str, qty: float, payload: dict) -> dict:
     result_close = close_all_positions(symbol, "LONG")
     time.sleep(GIRO_BUFFER_SECONDS)
     result_open  = place_order(symbol, "SELL", qty_open, "SHORT")
+    log_trade(
+        signal = "GIRO_SHORT_CLOSE",
+        symbol = symbol,
+        qty    = qty_close,
+        price  = payload.get("price", "0"),
+        result = result_close,
+        robot  = payload.get("robot", "CAZADOR"),
+        demo   = DEMO_MODE,
+    )
+    
+    log_trade(
+        signal = "GIRO_SHORT_OPEN",
+        symbol = symbol,
+        qty    = qty_open,
+        price  = payload.get("price", "0"),
+        result = result_open,
+        robot  = payload.get("robot", "CAZADOR"),
+        demo   = DEMO_MODE,
+    )
     
     update_state({"last_signal": "GIRO_SHORT", "symbol": symbol})
     return {"status": "ok", "action": "GIRO_SHORT", "close": result_close, "open": result_open}
@@ -152,14 +260,48 @@ def _giro_short(symbol: str, qty: float, payload: dict) -> dict:
 # ============================================================
 # 🛑 STOP LOSS
 # ============================================================
-def _sl_long(symbol: str, signal: str) -> dict:
+def _sl_long(symbol: str, signal: str, payload: dict = None) -> dict:
     logger.info(f"🛑 {signal} {symbol} — cerrando LONG completo")
-    result = close_all_positions(symbol, "LONG")
-    update_state({"last_signal": signal, "symbol": symbol})
-    return {"status": "ok", "action": signal, "result": result}
 
-def _sl_short(symbol: str, signal: str) -> dict:
-    logger.info(f"🛑 {signal} {symbol} — cerrando SHORT completo")
-    result = close_all_positions(symbol, "SHORT")
+    result = close_all_positions(symbol, "LONG")
+
+    log_trade(
+        signal = signal,
+        symbol = symbol,
+        qty    = 0,
+        price  = payload.get("price", "0") if payload else "0",
+        result = result,
+        robot  = payload.get("robot", "CAZADOR") if payload else "CAZADOR",
+        demo   = DEMO_MODE,
+    )
+
     update_state({"last_signal": signal, "symbol": symbol})
-    return {"status": "ok", "action": signal, "result": result}
+
+    return {
+        "status": "ok",
+        "action": signal,
+        "result": result
+    }
+
+def _sl_short(symbol: str, signal: str, payload: dict = None) -> dict:
+    logger.info(f"🛑 {signal} {symbol} — cerrando SHORT completo")
+
+    result = close_all_positions(symbol, "SHORT")
+
+    log_trade(
+        signal = signal,
+        symbol = symbol,
+        qty    = 0,
+        price  = payload.get("price", "0") if payload else "0",
+        result = result,
+        robot  = payload.get("robot", "CAZADOR") if payload else "CAZADOR",
+        demo   = DEMO_MODE,
+    )
+
+    update_state({"last_signal": signal, "symbol": symbol})
+
+    return {
+        "status": "ok",
+        "action": signal,
+        "result": result
+    }
