@@ -119,24 +119,35 @@ def _close_short(symbol: str) -> dict:
 # 🔄 GIROS
 # ============================================================
 def _giro_long(symbol: str, qty: float, payload: dict) -> dict:
-    """Cierra SHORT completo → espera buffer → abre LONG."""
     logger.info(f"🔄 GIRO_LONG {symbol}")
-    close_all_positions(symbol, "SHORT")
+    
+    qty_close = float(payload.get("qty_close", qty))
+    qty_open  = float(payload.get("qty_open", qty))
+    
+    logger.info(f"   qty_close={qty_close} qty_open={qty_open}")
+    
+    result_close = close_all_positions(symbol, "SHORT")
     time.sleep(GIRO_BUFFER_SECONDS)
-    qty_open = float(payload.get("qty_open", qty))
-    result = place_order(symbol, "BUY", qty_open, "LONG")
+    result_open  = place_order(symbol, "BUY", qty_open, "LONG")
+    
     update_state({"last_signal": "GIRO_LONG", "symbol": symbol})
-    return {"status": "ok", "action": "GIRO_LONG", "result": result}
+    return {"status": "ok", "action": "GIRO_LONG", "close": result_close, "open": result_open}
+
 
 def _giro_short(symbol: str, qty: float, payload: dict) -> dict:
-    """Cierra LONG completo → espera buffer → abre SHORT."""
     logger.info(f"🔄 GIRO_SHORT {symbol}")
-    close_all_positions(symbol, "LONG")
+    
+    qty_close = float(payload.get("qty_close", qty))
+    qty_open  = float(payload.get("qty_open", qty))
+    
+    logger.info(f"   qty_close={qty_close} qty_open={qty_open}")
+    
+    result_close = close_all_positions(symbol, "LONG")
     time.sleep(GIRO_BUFFER_SECONDS)
-    qty_open = float(payload.get("qty_open", qty))
-    result = place_order(symbol, "SELL", qty_open, "SHORT")
+    result_open  = place_order(symbol, "SELL", qty_open, "SHORT")
+    
     update_state({"last_signal": "GIRO_SHORT", "symbol": symbol})
-    return {"status": "ok", "action": "GIRO_SHORT", "result": result}
+    return {"status": "ok", "action": "GIRO_SHORT", "close": result_close, "open": result_open}
 
 # ============================================================
 # 🛑 STOP LOSS
