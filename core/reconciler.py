@@ -8,6 +8,7 @@ import threading
 import time
 from brokers.bingx import get_positions, get_balance
 from core.emergency import trigger_emergency
+from data.state import record_reconciler
 from config.settings import RECONCILE_INTERVAL
 from logs.logger import get_logger
 
@@ -38,6 +39,7 @@ def _check_state():
     TODO: Implementar comparación completa TV vs BingX.
     Por ahora solo consulta y loguea el estado real del broker.
     """
+    record_reconciler()
     logger.info("🔍 Reconciliación — consultando estado BingX...")
     balance   = get_balance()
     positions = get_positions()
@@ -52,3 +54,6 @@ def reconcile_now(symbol: str = "") -> dict:
     balance   = get_balance()
     positions = get_positions(symbol)
     return {"balance": balance, "positions": positions}
+
+def is_alive() -> bool:
+    return _reconciler_thread is not None and _reconciler_thread.is_alive()
