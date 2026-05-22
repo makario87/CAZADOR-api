@@ -13,6 +13,10 @@ from data.trade_log import get_trades
 from reports.csv_exporter import export_csv
 from brokers.bingx import get_balance, get_positions
 from logs.logger import get_logger
+from core.queue_manager import queue_size
+from core.reconciler import is_alive as reconciler_alive
+from data.state import get_state
+from utils.time_utils import format_log_time
 
 logger = get_logger(__name__)
 
@@ -37,6 +41,34 @@ def panel():
         "symbol":      state.get("symbol"),
     })
 
+@app.route("/health", methods=["GET"])
+def health():
+
+    state = get_state()
+
+    from core.queue_manager import _worker
+
+    worker_alive = _worker is not None and _worker.is_alive()
+
+    return jsonify({
+        "status":               "🟢 online",
+        "time_now":             format_log_time(),
+        "demo_mode":            DEMO_MODE,
+        "emergency":            state.get("emergency"),
+        "blocked":              state.get("blocked"),
+        "queue_size":           queue_size(),
+        "worker_alive":         worker_alive,
+        "reconciler_alive":     reconciler_alive(),
+        "last_webhook_time":    state.get("last_webhook_time"),
+        "last_webhook_signal":  state.get("last_webhook_signal"),
+        "last_reconciler_time": state.get("last_reconciler_time"),
+        "webhooks_received":    state.get("webhooks_received"),
+        "webhooks_ok":          state.get("webhooks_ok"),
+        "webhooks_failed":      state.get("webhooks_failed"),
+        "last_signal":          state.get("last_signal"),
+        "symbol":               state.get("symbol"),
+    })
+    
 @app.route("/ping", methods=["GET"])
 def ping():
     """Mantiene vivo el servidor en Render free tier."""
