@@ -124,6 +124,9 @@ def reset_state():
             "webhooks_ok":           0,
             "webhooks_failed":       0,
             "started_at":            format_log_time(),
+            "position_long":   False,
+            "position_short":  False,
+            "position_symbol": None,
         })
     save_state()
     logger.info("🔄 Estado reseteado completamente")
