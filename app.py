@@ -64,6 +64,7 @@ def health():
         "webhooks_received":    state.get("webhooks_received"),
         "webhooks_ok":          state.get("webhooks_ok"),
         "webhooks_failed":      state.get("webhooks_failed"),
+        "started_at":           state.get("started_at"),
         "last_signal":          state.get("last_signal"),
         "symbol":               state.get("symbol"),
     })
