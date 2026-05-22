@@ -9,7 +9,13 @@ from core.queue_manager import start_worker
 from core.reconciler import start_reconciler
 from core.emergency import resolve_emergency, is_emergency
 from data.state import get_state, reset_state, load_state, update_state
-from data.trade_log import get_trades
+from data.trade_log import (
+    load_trades,
+    get_trades,
+    get_summary,
+    export_csv_string,
+    clear_trades,
+)
 from reports.csv_exporter import export_csv
 from brokers.bingx import get_balance, get_positions
 from logs.logger import get_logger
@@ -142,6 +148,7 @@ if __name__ == "__main__":
     # Cargar estado persistente
     load_state()
     update_state({"started_at": format_log_time()})
+    load_trades()
     
     # Arrancar workers
     start_worker()
