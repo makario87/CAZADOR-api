@@ -72,7 +72,16 @@ def health():
 @app.route("/ping", methods=["GET"])
 def ping():
     """Mantiene vivo el servidor en Render free tier."""
-    return jsonify({"status": "pong"}), 200
+
+    response = jsonify({
+        "status": "pong",
+        "time":   format_log_time()
+    })
+
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"]        = "no-cache"
+
+    return response, 200
 
 @app.route("/state", methods=["GET"])
 def state():
