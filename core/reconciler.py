@@ -252,7 +252,7 @@ def reconcile_now(symbol: str = "") -> dict:
     record_reconciler()
 
     balance   = get_balance()
-    positions = get_positions()
+    positions = get_positions(symbol)
 
     return {
         "balance": balance,
