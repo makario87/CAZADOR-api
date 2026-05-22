@@ -107,16 +107,30 @@ def positions():
 
 @app.route("/trades", methods=["GET"])
 def trades():
-    """Historial de operaciones."""
-    return jsonify(get_trades())
+    """Historial completo + resumen."""
+    return jsonify({
+        "summary": get_summary(),
+        "trades":  get_trades()
+    })
 
 @app.route("/trades/csv", methods=["GET"])
 def trades_csv():
-    """Exporta operaciones a CSV."""
+    """Exporta historial persistente CSV."""
     from flask import Response
-    csv_data = export_csv()
-    return Response(csv_data, mimetype="text/csv",
-                    headers={"Content-Disposition": "attachment;filename=trades.csv"})
+
+    csv_data = export_csv_string()
+
+    if not csv_data:
+        return jsonify({"message": "No hay trades"}), 200
+
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition":
+            "attachment;filename=cazador_trades.csv"
+        }
+    )
 
 @app.route("/emergency/resolve", methods=["POST"])
 def emergency_resolve():
