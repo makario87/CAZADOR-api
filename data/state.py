@@ -37,6 +37,9 @@ _state = {
     "webhooks_ok":           0,
     "webhooks_failed":       0,
     "started_at":            None,
+    "position_long":   False,
+    "position_short":  False,
+    "position_symbol": None,
 }
 
 # ============================================================
@@ -124,3 +127,22 @@ def reset_state():
         })
     save_state()
     logger.info("🔄 Estado reseteado completamente")
+
+def update_position(symbol: str, has_long: bool, has_short: bool):
+    """
+    Actualiza qué posición cree Python que tiene abierta.
+    Se llama desde signal_handler tras cada operación.
+    """
+    with _lock:
+        _state["position_long"]   = has_long
+        _state["position_short"]  = has_short
+        _state["position_symbol"] = symbol if (has_long or has_short) else None
+
+    save_state()
+
+    logger.info(
+        f"📍 Posición actualizada: "
+        f"LONG={has_long} "
+        f"SHORT={has_short} "
+        f"symbol={symbol}"
+    )
