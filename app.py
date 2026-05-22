@@ -8,14 +8,13 @@ from routes.webhook import webhook_bp
 from core.queue_manager import start_worker
 from core.reconciler import start_reconciler
 from core.emergency import resolve_emergency, is_emergency
-from data.state import get_state, reset_state
+from data.state import get_state, reset_state, load_state, update_state
 from data.trade_log import get_trades
 from reports.csv_exporter import export_csv
 from brokers.bingx import get_balance, get_positions
 from logs.logger import get_logger
 from core.queue_manager import queue_size
 from core.reconciler import is_alive as reconciler_alive
-from data.state import get_state
 from utils.time_utils import format_log_time
 
 logger = get_logger(__name__)
@@ -139,7 +138,10 @@ if __name__ == "__main__":
         for e in errors:
             logger.error(f"❌ Config error: {e}")
         logger.warning("⚠️ Arrancando en modo demo por errores de config")
-
+    # Cargar estado persistente
+    load_state()
+    update_state({"started_at": format_log_time()})
+    
     # Arrancar workers
     start_worker()
     start_reconciler()
