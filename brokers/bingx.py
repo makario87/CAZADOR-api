@@ -1,121 +1,210 @@
 """
 brokers/bingx.py
 Conexión directa a BingX API REST.
-Usa requests + HMAC SHA256. Sin CCXT.
+Firma HMAC SHA256 validada contra VST Demo.
 """
 import hmac
 import hashlib
+import uuid
 import requests
-from config.settings import BINGX_API_KEY, BINGX_API_SECRET, BINGX_BASE_URL, DEMO_MODE
+from config.settings import BINGX_API_KEY, BINGX_API_SECRET, BINGX_BASE_URL, SIMULATION_MODE, BINGX_ENV, ORDER_TIMEOUT
 from utils.time_utils import now_ms
 from logs.logger import get_logger
 
 logger = get_logger(__name__)
 
+
 # ============================================================
 # 🔐 FIRMA HMAC SHA256
 # ============================================================
-def _sign(params: dict) -> str:
-    query = "&".join(f"{k}={v}" for k, v in sorted(params.items()))
+
+def _build_query(params: dict) -> str:
+    sorted_qs = "&".join(f"{k}={v}" for k, v in sorted(params.items()))
+    return sorted_qs + "&timestamp=" + str(now_ms())
+
+def _sign(query_string: str) -> str:
     return hmac.new(
         BINGX_API_SECRET.encode("utf-8"),
-        query.encode("utf-8"),
+        query_string.encode("utf-8"),
         hashlib.sha256
     ).hexdigest()
 
 def _headers() -> dict:
-    return {
-        "X-BX-APIKEY": BINGX_API_KEY,
-        "Content-Type": "application/json"
-    }
+    return {"X-BX-APIKEY": BINGX_API_KEY, "Content-Type": "application/json"}
+
+def _get(path: str, params: dict) -> dict:
+    try:
+        qs = _build_query(params)
+        sig = _sign(qs)
+        url = f"{BINGX_BASE_URL}{path}?{qs}&signature={sig}"
+        response = requests.get(url, headers=_headers(), timeout=ORDER_TIMEOUT)
+        return response.json()
+    except Exception as e:
+        logger.error(f"❌ GET {path} error: {e}")
+        return {}
+
+def _post(path: str, params: dict) -> dict:
+    try:
+        qs = _build_query(params)
+        sig = _sign(qs)
+        url = f"{BINGX_BASE_URL}{path}?{qs}&signature={sig}"
+        response = requests.post(url, headers=_headers(), data=b"", timeout=ORDER_TIMEOUT)
+        return response.json()
+    except Exception as e:
+        logger.error(f"❌ POST {path} error: {e}")
+        return {}
+
 
 # ============================================================
 # 📊 CONSULTAS
 # ============================================================
+
 def get_balance() -> dict:
-    """Consulta balance disponible en cuenta de futuros."""
-    try:
-        params = {"timestamp": now_ms()}
-        params["signature"] = _sign(params)
-        url = f"{BINGX_BASE_URL}/openApi/swap/v2/user/balance"
-        response = requests.get(url, headers=_headers(), params=params, timeout=5)
-        data = response.json()
-        logger.info(f"💰 Balance consultado: {data}")
-        return data
-    except Exception as e:
-        logger.error(f"❌ Error consultando balance: {e}")
-        return {}
+    data = _get("/openApi/swap/v2/user/balance", {"currency": "USDT"})
+    if data.get("code") == 0:
+        bal = data.get("data", {}).get("balance", {})
+        logger.info(f"💰 [{BINGX_ENV.upper()}] Balance — equity={bal.get('equity')} available={bal.get('availableMargin')} USDT")
+    else:
+        logger.error(f"❌ Balance error: code={data.get('code')} msg={data.get('msg')}")
+    return data
 
 def get_positions(symbol: str = "") -> dict:
-    """Consulta posiciones abiertas."""
-    try:
-        params = {"timestamp": now_ms()}
-        if symbol:
-            params["symbol"] = symbol
-        params["signature"] = _sign(params)
-        url = f"{BINGX_BASE_URL}/openApi/swap/v2/user/positions"
-        response = requests.get(url, headers=_headers(), params=params, timeout=5)
-        data = response.json()
-        logger.info(f"📋 Posiciones consultadas: {data}")
-        return data
-    except Exception as e:
-        logger.error(f"❌ Error consultando posiciones: {e}")
-        return {}
+    params = {}
+    if symbol:
+        params["symbol"] = symbol
+    data = _get("/openApi/swap/v2/user/positions", params)
+    if data.get("code") == 0:
+        positions = [p for p in (data.get("data") or []) if float(p.get("positionAmt", 0)) != 0]
+        logger.info(f"📋 [{BINGX_ENV.upper()}] Posiciones abiertas: {len(positions)}")
+    else:
+        logger.error(f"❌ Positions error: code={data.get('code')} msg={data.get('msg')}")
+    return data
+
 
 # ============================================================
 # 🚀 ÓRDENES
 # ============================================================
-def place_order(symbol: str, side: str, quantity: float, position_side: str = "LONG") -> dict:
+
+def place_order(
+    symbol: str,
+    side: str,
+    quantity: float,
+    position_side: str = "LONG",
+    price_signal: float = None,
+    robot: str = ""
+) -> dict:
     """
     Coloca una orden de mercado.
-    side: BUY | SELL
-    position_side: LONG | SHORT (Hedge Mode)
+    side:          BUY | SELL
+    position_side: LONG | SHORT (Hedge Mode obligatorio)
     """
-    if DEMO_MODE:
-        logger.info(f"🧪 DEMO MODE — Orden simulada: {side} {quantity} {symbol} [{position_side}]")
-        return {"demo": True, "side": side, "qty": quantity, "symbol": symbol}
-
-    try:
-        params = {
-            "symbol": symbol,
+    if SIMULATION_MODE:
+        logger.info(f"🧪 SIMULATION — [{robot}] {side} {quantity} {symbol} [{position_side}]")
+        return {
+            "simulation": True,
+            "code": 0,
+            "robot": robot,
             "side": side,
-            "positionSide": position_side,
-            "type": "MARKET",
-            "quantity": quantity,
-            "timestamp": now_ms()
-        }
-        params["signature"] = _sign(params)
-        url = f"{BINGX_BASE_URL}/openApi/swap/v2/trade/order"
-        response = requests.post(url, headers=_headers(), params=params, timeout=5)
-        data = response.json()
-        logger.info(f"✅ Orden ejecutada: {data}")
-        return data
-    except Exception as e:
-        logger.error(f"❌ Error ejecutando orden: {e}")
-        return {}
-
-def close_all_positions(symbol: str, side: str) -> dict:
-    """
-    Cierra TODA la posición de un lado (LONG o SHORT).
-    Usado en CLOSE_LONG, CLOSE_SHORT, GIROS y SL.
-    """
-    if DEMO_MODE:
-        logger.info(f"🧪 DEMO MODE — Cierre simulado: {side} {symbol}")
-        return {"demo": True, "action": "close", "side": side, "symbol": symbol}
-
-    try:
-        params = {
+            "qty": quantity,
             "symbol": symbol,
-            "positionSide": side,
-            "type": "MARKET",
-            "timestamp": now_ms()
+            "position_side": position_side,
         }
-        params["signature"] = _sign(params)
-        url = f"{BINGX_BASE_URL}/openApi/swap/v2/trade/closePosition"
-        response = requests.post(url, headers=_headers(), params=params, timeout=5)
-        data = response.json()
-        logger.info(f"✅ Posición cerrada: {data}")
-        return data
-    except Exception as e:
-        logger.error(f"❌ Error cerrando posición: {e}")
-        return {}
+
+    client_order_id = str(uuid.uuid4())
+    params = {
+        "clientOrderID": client_order_id,
+        "positionSide":  position_side,
+        "quantity":      str(quantity),
+        "side":          side,
+        "symbol":        symbol,
+        "type":          "MARKET",
+    }
+
+    data = _post("/openApi/swap/v2/trade/order", params)
+    code = data.get("code")
+
+    if code == 0:
+        order = data.get("data", {}).get("order", {})
+        price_executed = float(order.get("avgPrice", 0) or 0)
+        qty_executed   = float(order.get("executedQty", quantity) or quantity)
+        commission     = float(order.get("commission", 0) or 0)
+
+        slippage = None
+        if price_signal and price_executed:
+            slippage = round(price_executed - float(price_signal), 8)
+
+        logger.info(
+            f"✅ [{BINGX_ENV.upper()}][{robot}] ORDER OK — {side} {position_side} {symbol} "
+            f"qty={qty_executed} price={price_executed} "
+            f"slip={slippage} commission={commission} USDT "
+            f"orderId={order.get('orderId')} clientId={client_order_id}"
+        )
+
+        data["_meta"] = {
+            "robot":            robot,
+            "symbol":           symbol,
+            "side":             side,
+            "position_side":    position_side,
+            "qty_executed":     qty_executed,
+            "price_signal":     price_signal,
+            "price_executed":   price_executed,
+            "slippage":         slippage,
+            "commission":       commission,
+            "commission_asset": order.get("commissionAsset", "USDT"),
+            "order_id":         order.get("orderId"),
+            "client_order_id":  client_order_id,
+        }
+    else:
+        logger.error(
+            f"❌ [{BINGX_ENV.upper()}][{robot}] ORDER FAILED — {side} {position_side} {symbol} "
+            f"qty={quantity} code={code} msg={data.get('msg')} clientId={client_order_id}"
+        )
+
+    return data
+
+
+def close_position(
+    symbol: str,
+    position_side: str,
+    quantity: float = None,
+    price_signal: float = None,
+    robot: str = ""
+) -> dict:
+    """
+    Cierra una posición (total o parcial).
+    Si quantity=None, consulta qty real en BingX antes de cerrar.
+    """
+    if SIMULATION_MODE:
+        logger.info(f"🧪 SIMULATION — [{robot}] CLOSE {position_side} {symbol} qty={quantity}")
+        return {"simulation": True, "code": 0, "action": "close", "position_side": position_side, "symbol": symbol}
+
+    if quantity is None:
+        pos_data = get_positions(symbol)
+        positions = pos_data.get("data") or []
+        pos = next(
+            (p for p in positions
+             if p.get("positionSide") == position_side and float(p.get("positionAmt", 0)) > 0),
+            None
+        )
+        if not pos:
+            logger.warning(f"⚠️ [{robot}] CLOSE {position_side} {symbol} — no hay posición abierta")
+            return {"code": -1, "msg": "no_open_position"}
+        quantity = abs(float(pos.get("positionAmt", 0)))
+
+    close_side = "SELL" if position_side == "LONG" else "BUY"
+    return place_order(
+        symbol=symbol,
+        side=close_side,
+        quantity=quantity,
+        position_side=position_side,
+        price_signal=price_signal,
+        robot=robot,
+    )
+
+
+# ============================================================
+# 🔧 ALIAS compatibilidad con signal_handler existente
+# ============================================================
+def close_all_positions(symbol: str, side: str, robot: str = "") -> dict:
+    """side aquí es positionSide: LONG | SHORT"""
+    return close_position(symbol=symbol, position_side=side, robot=robot)
