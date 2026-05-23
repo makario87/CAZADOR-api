@@ -109,6 +109,25 @@ def round_qty(symbol: str, qty: float) -> float:
 
     return rounded
 
+def format_qty(symbol: str, qty: float) -> str:
+    """
+    Formatea qty como string según quantityPrecision del contrato.
+    precision=0 → "10970"   (entero puro)
+    precision=1 → "10970.0" (1 decimal)
+    precision=3 → "0.001"   (3 decimales)
+
+    Usar esto en vez de str(qty) al construir params de orden.
+    """
+    cache = _get_cache()
+    info  = cache.get(symbol)
+
+    precision = info["quantity_precision"] if info else 0
+
+    if precision == 0:
+        return str(int(round(qty, 0)))
+    else:
+        return str(round(qty, precision))
+        
 def get_symbol_info(symbol: str) -> dict:
     """Devuelve info completa del contrato. Útil para logs y debugging."""
     return _get_cache().get(symbol, {})
