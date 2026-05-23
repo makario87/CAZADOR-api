@@ -10,6 +10,7 @@ import requests
 from config.settings import BINGX_API_KEY, BINGX_API_SECRET, BINGX_BASE_URL, SIMULATION_MODE, BINGX_ENV, ORDER_TIMEOUT
 from utils.time_utils import now_ms
 from logs.logger import get_logger
+from brokers.market_info import round_qty
 
 logger = get_logger(__name__)
 
@@ -158,6 +159,7 @@ def place_order(
         }
 
     symbol = normalize_symbol(symbol)
+    quantity = round_qty(symbol, quantity)   # precisión y mínimo según contrato
     client_order_id = str(uuid.uuid4())
     params = {
         "clientOrderID": client_order_id,
