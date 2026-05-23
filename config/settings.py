@@ -53,6 +53,7 @@ BINGX_BASE_URL = _BINGX_BASE_URL_LIVE if BINGX_ENV == "live" else _BINGX_BASE_UR
 # ============================================================
 SIGNAL_EXPIRY_SECONDS  = 10    # Señales más viejas que esto se ignoran
 ORDER_CONFIRM_TIMEOUT  = 5     # Segundos para confirmar orden
+ORDER_TIMEOUT          = int(os.getenv("ORDER_TIMEOUT", "10"))  # Timeout HTTP órdenes BingX
 GIRO_BUFFER_SECONDS    = 0.3   # Espera entre cierre y apertura en giros
 RECONCILE_INTERVAL     = 30    # Segundos entre reconciliaciones automáticas
 
