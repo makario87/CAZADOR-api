@@ -15,6 +15,53 @@ logger = get_logger(__name__)
 
 
 # ============================================================
+# 🔄 NORMALIZACIÓN SÍMBOLO TV → BINGX
+# ============================================================
+# TradingView envía símbolos en formato exchange: PENGUUSDT.P, BTCUSDT.P
+# BingX Swap API espera:                          PENGU-USDT, BTC-USDT
+#
+# Regla general: quitar sufijo .P, insertar guión antes de USDT/BUSD/BTC
+# Tabla de excepciones para pares que no siguen el patrón estándar.
+
+_SYMBOL_EXCEPTIONS: dict[str, str] = {
+    # "TVFORMAT": "BINGX-FORMAT",
+    # Añadir aquí si algún par no normaliza bien automáticamente
+}
+
+def normalize_symbol(symbol: str) -> str:
+    """
+    Convierte símbolo TradingView a formato BingX.
+    PENGUUSDT.P  → PENGU-USDT
+    BTCUSDT.P    → BTC-USDT
+    1000PEPEUSDT.P → 1000PEPE-USDT
+    Si ya tiene guión se devuelve tal cual.
+    """
+    # Limpiar sufijos de TradingView
+    clean = symbol.upper().replace(".P", "").replace(".PERP", "").strip()
+
+    # Si ya está en formato BingX (tiene guión) no tocar
+    if "-" in clean:
+        return clean
+
+    # Tabla de excepciones primero
+    if clean in _SYMBOL_EXCEPTIONS:
+        return _SYMBOL_EXCEPTIONS[clean]
+
+    # Regla automática: insertar guión antes de las quote currencies conocidas
+    for quote in ("USDT", "BUSD", "USDC", "BTC", "ETH"):
+        if clean.endswith(quote):
+            base = clean[: -len(quote)]
+            if base:
+                result = f"{base}-{quote}"
+                logger.debug(f"🔄 Símbolo normalizado: {symbol} → {result}")
+                return result
+
+    # Si no se pudo normalizar, devolver limpio y loguear aviso
+    logger.warning(f"⚠️ Símbolo no normalizado: {symbol} → {clean} (usando tal cual)")
+    return clean
+
+
+# ============================================================
 # 🔐 FIRMA HMAC SHA256
 # ============================================================
 
@@ -71,7 +118,7 @@ def get_balance() -> dict:
 def get_positions(symbol: str = "") -> dict:
     params = {}
     if symbol:
-        params["symbol"] = symbol
+        params["symbol"] = normalize_symbol(symbol)
     data = _get("/openApi/swap/v2/user/positions", params)
     if data.get("code") == 0:
         positions = [p for p in (data.get("data") or []) if float(p.get("positionAmt", 0)) != 0]
@@ -110,6 +157,7 @@ def place_order(
             "position_side": position_side,
         }
 
+    symbol = normalize_symbol(symbol)
     client_order_id = str(uuid.uuid4())
     params = {
         "clientOrderID": client_order_id,
