@@ -78,7 +78,7 @@ def _sign(query_string: str) -> str:
     ).hexdigest()
 
 def _headers() -> dict:
-    return {"X-BX-APIKEY": BINGX_API_KEY, "Content-Type": "application/json"}
+    return {"X-BX-APIKEY": BINGX_API_KEY}
 
 def _get(path: str, params: dict) -> dict:
     try:
