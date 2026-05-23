@@ -9,6 +9,7 @@ from core.queue_manager import start_worker
 from core.reconciler import start_reconciler
 from core.emergency import resolve_emergency, is_emergency
 from data.state import get_state, reset_state, load_state, update_state
+from brokers.market_info import preload as preload_market
 from data.trade_log import (
     load_trades,
     get_trades,
@@ -163,6 +164,7 @@ if __name__ == "__main__":
     load_state()
     update_state({"started_at": format_log_time()})
     load_trades()
+    preload_market()
     
     # Arrancar workers
     start_worker()
