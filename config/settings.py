@@ -27,7 +27,7 @@ WEBHOOK_SECRET_TOKEN = os.getenv("WEBHOOK_SECRET_TOKEN", "")
 # ⚙️ MODO OPERATIVO — DOS VARIABLES INDEPENDIENTES
 # ============================================================
 
-# SIMULATION_MODE: True → órdenes simuladas en Python, NO van a BingX
+# SIMULATION_MODE: True  → órdenes simuladas en Python, NO van a BingX
 #                  False → órdenes reales enviadas al broker
 SIMULATION_MODE = os.getenv("SIMULATION_MODE", "true").lower() == "true"
 
@@ -35,6 +35,10 @@ SIMULATION_MODE = os.getenv("SIMULATION_MODE", "true").lower() == "true"
 #            "live" → broker real (open-api.bingx.com)
 # Solo importa cuando SIMULATION_MODE=false
 BINGX_ENV = os.getenv("BINGX_ENV", "demo").lower()
+
+# DEMO_MODE: alias de compatibilidad — NO usar en código nuevo
+# Permite que app.py y otros archivos no actualizados sigan funcionando
+DEMO_MODE = SIMULATION_MODE
 
 # ============================================================
 # 🌐 ENDPOINTS BINGX
@@ -58,7 +62,6 @@ RECONCILE_INTERVAL     = 30    # Segundos entre reconciliaciones automáticas
 def validate():
     errors = []
     if not SIMULATION_MODE:
-        # Solo validar keys si vamos a usarlas
         if not BINGX_API_KEY or BINGX_API_KEY == "TEST_API_KEY_PLACEHOLDER":
             errors.append("BINGX_API_KEY no configurada")
         if not BINGX_API_SECRET or BINGX_API_SECRET == "TEST_API_SECRET_PLACEHOLDER":
