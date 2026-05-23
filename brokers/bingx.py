@@ -97,7 +97,7 @@ def _post(path: str, params: dict) -> dict:
         sig = _sign(qs)
         url = f"{BINGX_BASE_URL}{path}?{qs}&signature={sig}"
         logger.info(f"📤 POST {path} | params={params} | qs={qs[:120]}...")
-        response = requests.post(url, headers=_headers(), data=b"", timeout=ORDER_TIMEOUT)
+        response = requests.post(url, headers=_headers(), data={}, timeout=ORDER_TIMEOUT)
         return response.json()
     except Exception as e:
         logger.error(f"❌ POST {path} error: {e}")
