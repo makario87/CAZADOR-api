@@ -56,6 +56,18 @@ ORDER_CONFIRM_TIMEOUT  = 5     # Segundos para confirmar orden
 ORDER_TIMEOUT          = int(os.getenv("ORDER_TIMEOUT", "10"))  # Timeout HTTP órdenes BingX
 GIRO_BUFFER_SECONDS    = 0.3   # Espera entre cierre y apertura en giros
 RECONCILE_INTERVAL     = 30    # Segundos entre reconciliaciones automáticas
+# ============================================================
+# 💰 SIZING — cálculo de qty en Python
+# ============================================================
+# RISK_PCT: fracción del balance disponible a usar como margen por entrada.
+# BingX aplica el leverage configurado manualmente en el broker por símbolo.
+# Ejemplo: balance=1000 USDT, RISK_PCT=0.05, leverage x10 en BingX
+#   → Python usa 50 USDT de margen → posicion real de 500 USDT
+#
+# Configurable desde Render sin tocar codigo.
+# Futuro: config por robot {"CAZADOR": 0.05, "HUNTER": 0.03}
+RISK_PCT = float(os.getenv("RISK_PCT_DEFAULT", "0.05"))  # 5% por defecto
+
 
 # ============================================================
 # 🚨 VALIDACIONES AL ARRANQUE
