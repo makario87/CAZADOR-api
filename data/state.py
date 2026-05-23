@@ -37,9 +37,15 @@ _state = {
     "webhooks_ok":           0,
     "webhooks_failed":       0,
     "started_at":            None,
-    "position_long":   False,
-    "position_short":  False,
-    "position_symbol": None,
+    # — posición activa —
+    "position_long":         False,
+    "position_short":        False,
+    "position_symbol":       None,
+    # — datos entrada para PnL futuro —
+    "entry_price_long":      None,   # precio medio entrada LONG
+    "entry_price_short":     None,   # precio medio entrada SHORT
+    "entry_qty_long":        None,   # qty total abierta LONG
+    "entry_qty_short":       None,   # qty total abierta SHORT
 }
 
 # ============================================================
@@ -47,7 +53,6 @@ _state = {
 # ============================================================
 
 def save_state():
-    """Guarda el estado actual en disco."""
     try:
         with open(STATE_FILE, "w") as f:
             json.dump(_state, f, indent=2)
@@ -55,23 +60,17 @@ def save_state():
         logger.error(f"❌ Error guardando estado: {e}")
 
 def load_state():
-    """
-    Carga el estado desde disco al arrancar.
-    Si no existe el archivo arranca desde cero.
-    """
     global _state
     if not os.path.exists(STATE_FILE):
         logger.info("📂 No hay estado previo — arrancando desde cero")
         return
-
     try:
         with open(STATE_FILE) as f:
             saved = json.load(f)
             _state.update(saved)
         logger.info(f"✅ Estado restaurado desde disco: {STATE_FILE}")
         logger.info(f"   last_signal: {_state.get('last_signal')}")
-        logger.info(f"   last_webhook: {_state.get('last_webhook_time')}")
-        logger.info(f"   emergency: {_state.get('emergency')}")
+        logger.info(f"   emergency:   {_state.get('emergency')}")
     except Exception as e:
         logger.error(f"❌ Error cargando estado: {e} — arrancando desde cero")
 
@@ -84,14 +83,12 @@ def get_state() -> dict:
         return _state.copy()
 
 def update_state(updates: dict):
-    """Actualiza estado en RAM y persiste al disco."""
     with _lock:
         _state.update(updates)
     save_state()
     logger.info(f"📊 Estado actualizado: {updates}")
 
 def record_webhook(signal: str, ok: bool):
-    """Registra métricas de webhooks recibidos."""
     with _lock:
         _state["last_webhook_time"]   = format_log_time()
         _state["last_webhook_signal"] = signal
@@ -103,13 +100,11 @@ def record_webhook(signal: str, ok: bool):
     save_state()
 
 def record_reconciler():
-    """Registra timestamp del último ciclo de reconciliación."""
     with _lock:
         _state["last_reconciler_time"] = format_log_time()
     save_state()
 
 def reset_state():
-    """Reset completo — útil para debug o emergencias."""
     with _lock:
         _state.update({
             "emergency":             False,
@@ -124,9 +119,13 @@ def reset_state():
             "webhooks_ok":           0,
             "webhooks_failed":       0,
             "started_at":            format_log_time(),
-            "position_long":   False,
-            "position_short":  False,
-            "position_symbol": None,
+            "position_long":         False,
+            "position_short":        False,
+            "position_symbol":       None,
+            "entry_price_long":      None,
+            "entry_price_short":     None,
+            "entry_qty_long":        None,
+            "entry_qty_short":       None,
         })
     save_state()
     logger.info("🔄 Estado reseteado completamente")
@@ -134,18 +133,46 @@ def reset_state():
 def update_position(symbol: str, has_long: bool, has_short: bool):
     """
     Actualiza qué posición cree Python que tiene abierta.
-    Se llama desde signal_handler tras cada operación.
+    Para registrar precio/qty de entrada usar update_entry().
     """
     with _lock:
         _state["position_long"]   = has_long
         _state["position_short"]  = has_short
         _state["position_symbol"] = symbol if (has_long or has_short) else None
-
+        # Al cerrar completamente, limpiar datos de entrada
+        if not has_long:
+            _state["entry_price_long"] = None
+            _state["entry_qty_long"]   = None
+        if not has_short:
+            _state["entry_price_short"] = None
+            _state["entry_qty_short"]   = None
     save_state()
-
     logger.info(
         f"📍 Posición actualizada: "
-        f"LONG={has_long} "
-        f"SHORT={has_short} "
-        f"symbol={symbol}"
+        f"LONG={has_long} SHORT={has_short} symbol={symbol}"
     )
+
+def update_entry(side: str, price: float, qty: float):
+    """
+    Guarda precio y qty de entrada para calcular PnL al cerrar.
+    side: 'LONG' | 'SHORT'
+    En pirámide: hace precio medio ponderado.
+    """
+    with _lock:
+        if side == "LONG":
+            prev_qty   = _state.get("entry_qty_long")   or 0
+            prev_price = _state.get("entry_price_long") or price
+            new_qty    = prev_qty + qty
+            # Precio medio ponderado
+            avg_price  = ((prev_price * prev_qty) + (price * qty)) / new_qty if new_qty else price
+            _state["entry_qty_long"]   = new_qty
+            _state["entry_price_long"] = round(avg_price, 8)
+        elif side == "SHORT":
+            prev_qty   = _state.get("entry_qty_short")   or 0
+            prev_price = _state.get("entry_price_short") or price
+            new_qty    = prev_qty + qty
+            avg_price  = ((prev_price * prev_qty) + (price * qty)) / new_qty if new_qty else price
+            _state["entry_qty_short"]   = new_qty
+            _state["entry_price_short"] = round(avg_price, 8)
+    save_state()
+    logger.info(f"📍 Entrada registrada: {side} qty={qty} price={price}")
