@@ -162,10 +162,11 @@ def place_order(
     symbol = normalize_symbol(symbol)
     quantity = round_qty(symbol, quantity)   # precisión y mínimo según contrato
     client_order_id = str(uuid.uuid4())
+    qty_str = str(int(quantity)) if isinstance(quantity, float) and quantity.is_integer() else str(quantity)
     params = {
         "clientOrderID": client_order_id,
         "positionSide":  position_side,
-        "quantity":      str(quantity),
+        "quantity":      qty_str,
         "side":          side,
         "symbol":        symbol,
         "type":          "MARKET",
