@@ -12,19 +12,37 @@ BINGX_API_KEY    = os.getenv("BINGX_API_KEY", "")
 BINGX_API_SECRET = os.getenv("BINGX_API_SECRET", "")
 
 # ============================================================
-# 🔐 SEGURIDAD WEBHOOK
+# 🔐 SEGURIDAD WEBHOOK — token principal
 # ============================================================
 WEBHOOK_SECRET_TOKEN = os.getenv("WEBHOOK_SECRET_TOKEN", "")
 
+# --- FUTURO: tokens por robot (añadir cuando haya >1 robot) ---
+# ROBOT_TOKENS = {
+#     "CAZADOR_A": os.getenv("TOKEN_CAZADOR_A", ""),
+#     "CAZADOR_B": os.getenv("TOKEN_CAZADOR_B", ""),
+#     "HUNTER":    os.getenv("TOKEN_HUNTER",    ""),
+# }
+
 # ============================================================
-# ⚙️ MODO OPERATIVO
+# ⚙️ MODO OPERATIVO — DOS VARIABLES INDEPENDIENTES
 # ============================================================
-DEMO_MODE = os.getenv("DEMO_MODE", "true").lower() == "true"
+
+# SIMULATION_MODE: True → órdenes simuladas en Python, NO van a BingX
+#                  False → órdenes reales enviadas al broker
+SIMULATION_MODE = os.getenv("SIMULATION_MODE", "true").lower() == "true"
+
+# BINGX_ENV: "demo" → broker VST (open-api-vst.bingx.com)
+#            "live" → broker real (open-api.bingx.com)
+# Solo importa cuando SIMULATION_MODE=false
+BINGX_ENV = os.getenv("BINGX_ENV", "demo").lower()
 
 # ============================================================
 # 🌐 ENDPOINTS BINGX
 # ============================================================
-BINGX_BASE_URL = "https://open-api.bingx.com"
+_BINGX_BASE_URL_LIVE = "https://open-api.bingx.com"
+_BINGX_BASE_URL_DEMO = "https://open-api-vst.bingx.com"
+
+BINGX_BASE_URL = _BINGX_BASE_URL_LIVE if BINGX_ENV == "live" else _BINGX_BASE_URL_DEMO
 
 # ============================================================
 # ⏱️ CONFIGURACIÓN SISTEMA
@@ -39,10 +57,12 @@ RECONCILE_INTERVAL     = 30    # Segundos entre reconciliaciones automáticas
 # ============================================================
 def validate():
     errors = []
-    if not BINGX_API_KEY or BINGX_API_KEY == "TEST_API_KEY_PLACEHOLDER":
-        errors.append("BINGX_API_KEY no configurada")
-    if not BINGX_API_SECRET or BINGX_API_SECRET == "TEST_API_SECRET_PLACEHOLDER":
-        errors.append("BINGX_API_SECRET no configurada")
+    if not SIMULATION_MODE:
+        # Solo validar keys si vamos a usarlas
+        if not BINGX_API_KEY or BINGX_API_KEY == "TEST_API_KEY_PLACEHOLDER":
+            errors.append("BINGX_API_KEY no configurada")
+        if not BINGX_API_SECRET or BINGX_API_SECRET == "TEST_API_SECRET_PLACEHOLDER":
+            errors.append("BINGX_API_SECRET no configurada")
     if not WEBHOOK_SECRET_TOKEN:
         errors.append("WEBHOOK_SECRET_TOKEN no configurada")
     return errors
