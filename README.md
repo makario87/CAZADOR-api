@@ -1,4 +1,4 @@
-# CAZADOR Middleware
+# central-bots-api Middleware
 
 TradingView → Webhook → Python → BingX API
 
