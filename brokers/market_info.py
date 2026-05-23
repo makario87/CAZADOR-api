@@ -97,7 +97,7 @@ def round_qty(symbol: str, qty: float) -> float:
 
     rounded = round(qty, precision)
     if precision == 0:
-        rounded = float(int(rounded))
+        rounded = int(rounded)
 
     # Respetar mínimo del contrato
     if rounded < min_qty:
