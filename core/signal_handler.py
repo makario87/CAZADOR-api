@@ -131,43 +131,108 @@ def handle_signal(payload: dict) -> dict:
 
 def _entry_long(symbol: str, price: str, robot: str, payload: dict) -> dict:
     qty = _calculate_qty(price, robot)
+
     if qty <= 0:
         return {"status": "error", "reason": "qty_calculation_failed"}
 
     logger.info(f"🟢 ENTRY_LONG {symbol} qty={qty} price={price} [{robot}]")
-    result = place_order(symbol, "BUY", qty, "LONG", price_signal=float(price), robot=robot)
 
-    log_trade(signal="ENTRY_LONG", symbol=symbol, qty=qty, price=price,
-              result=result, robot=robot, demo=SIMULATION_MODE)
-    update_state({"last_signal": "ENTRY_LONG", "symbol": symbol})
-    update_position(symbol, has_long=True, has_short=False)
+    result = place_order(
+        symbol,
+        "BUY",
+        qty,
+        "LONG",
+        price_signal=float(price),
+        robot=robot
+    )
 
-    # Guardar entrada para PnL futuro
-    if result.get("code") == 0:
+    log_trade(
+        signal="ENTRY_LONG",
+        symbol=symbol,
+        qty=qty,
+        price=price,
+        result=result,
+        robot=robot,
+        demo=SIMULATION_MODE
+    )
+
+    code = result.get("code", -1)
+
+    if code == 0:
+        update_state({"last_signal": "ENTRY_LONG", "symbol": symbol})
+        update_position(symbol, has_long=True, has_short=False)
+
         price_exec = result.get("_meta", {}).get("price_executed") or float(price)
+
         update_entry("LONG", price_exec, qty)
 
-    return {"status": "ok", "action": "ENTRY_LONG", "qty": qty, "result": result}
+        logger.info(f"✅ ENTRY_LONG ejecutado y state actualizado [{robot}]")
+
+    else:
+        logger.error(
+            f"❌ ENTRY_LONG FALLÓ — state NO actualizado. "
+            f"code={code} msg={result.get('msg')} [{robot}]"
+        )
+
+    return {
+        "status": "ok" if code == 0 else "error",
+        "action": "ENTRY_LONG",
+        "qty": qty,
+        "result": result
+    }
 
 
 def _entry_short(symbol: str, price: str, robot: str, payload: dict) -> dict:
     qty = _calculate_qty(price, robot)
+
     if qty <= 0:
         return {"status": "error", "reason": "qty_calculation_failed"}
 
     logger.info(f"🔴 ENTRY_SHORT {symbol} qty={qty} price={price} [{robot}]")
-    result = place_order(symbol, "SELL", qty, "SHORT", price_signal=float(price), robot=robot)
 
-    log_trade(signal="ENTRY_SHORT", symbol=symbol, qty=qty, price=price,
-              result=result, robot=robot, demo=SIMULATION_MODE)
-    update_state({"last_signal": "ENTRY_SHORT", "symbol": symbol})
-    update_position(symbol, has_long=False, has_short=True)
+    result = place_order(
+        symbol,
+        "SELL",
+        qty,
+        "SHORT",
+        price_signal=float(price),
+        robot=robot
+    )
 
-    if result.get("code") == 0:
+    log_trade(
+        signal="ENTRY_SHORT",
+        symbol=symbol,
+        qty=qty,
+        price=price,
+        result=result,
+        robot=robot,
+        demo=SIMULATION_MODE
+    )
+
+    code = result.get("code", -1)
+
+    if code == 0:
+        update_state({"last_signal": "ENTRY_SHORT", "symbol": symbol})
+        update_position(symbol, has_long=False, has_short=True)
+
         price_exec = result.get("_meta", {}).get("price_executed") or float(price)
+
         update_entry("SHORT", price_exec, qty)
 
-    return {"status": "ok", "action": "ENTRY_SHORT", "qty": qty, "result": result}
+        logger.info(f"✅ ENTRY_SHORT ejecutado y state actualizado [{robot}]")
+
+    else:
+        logger.error(
+            f"❌ ENTRY_SHORT FALLÓ — state NO actualizado. "
+            f"code={code} msg={result.get('msg')} [{robot}]"
+        )
+
+    return {
+        "status": "ok" if code == 0 else "error",
+        "action": "ENTRY_SHORT",
+        "qty": qty,
+        "result": result
+    }
 
 
 # ============================================================
@@ -213,58 +278,229 @@ def _close_short(symbol: str, price: str, robot: str, payload: dict) -> dict:
 # 🔄 GIROS
 # ============================================================
 
-def _giro_long(symbol: str, price: str, robot: str, payload: dict) -> dict:
+def _giro_long(symbol, price, robot, payload):
     logger.info(f"🔄 GIRO_LONG {symbol} [{robot}]")
 
     result_close = close_all_positions(symbol, "SHORT", robot=robot)
+
+    code_close = result_close.get("code", -1)
+
+    if code_close != 0:
+        logger.error(
+            f"❌ GIRO_LONG cierre SHORT falló — abortando. "
+            f"code={code_close} [{robot}]"
+        )
+
+        trigger_emergency(
+            f"GIRO_LONG no cerró SHORT: "
+            f"code={code_close} "
+            f"msg={result_close.get('msg')}"
+        )
+
+        log_trade(
+            signal="GIRO_LONG_CLOSE",
+            symbol=symbol,
+            qty=0,
+            price=price,
+            result=result_close,
+            robot=robot,
+            demo=SIMULATION_MODE
+        )
+
+        return {
+            "status": "error",
+            "action": "GIRO_LONG",
+            "reason": "close_failed",
+            "close": result_close
+        }
+
     time.sleep(GIRO_BUFFER_SECONDS)
 
     qty = _calculate_qty(price, robot)
+
     if qty <= 0:
         return {"status": "error", "reason": "qty_calculation_failed"}
 
-    result_open = place_order(symbol, "BUY", qty, "LONG", price_signal=float(price), robot=robot)
+    result_open = place_order(
+        symbol,
+        "BUY",
+        qty,
+        "LONG",
+        price_signal=float(price),
+        robot=robot
+    )
 
-    log_trade(signal="GIRO_LONG_CLOSE", symbol=symbol, qty=0, price=price,
-              result=result_close, robot=robot, demo=SIMULATION_MODE)
-    log_trade(signal="GIRO_LONG_OPEN", symbol=symbol, qty=qty, price=price,
-              result=result_open, robot=robot, demo=SIMULATION_MODE)
+    log_trade(
+        signal="GIRO_LONG_CLOSE",
+        symbol=symbol,
+        qty=0,
+        price=price,
+        result=result_close,
+        robot=robot,
+        demo=SIMULATION_MODE
+    )
 
-    update_state({"last_signal": "GIRO_LONG", "symbol": symbol})
-    update_position(symbol, has_long=True, has_short=False)
+    log_trade(
+        signal="GIRO_LONG_OPEN",
+        symbol=symbol,
+        qty=qty,
+        price=price,
+        result=result_open,
+        robot=robot,
+        demo=SIMULATION_MODE
+    )
 
-    if result_open.get("code") == 0:
-        price_exec = result_open.get("_meta", {}).get("price_executed") or float(price)
+    code_open = result_open.get("code", -1)
+
+    if code_open == 0:
+        update_state({"last_signal": "GIRO_LONG", "symbol": symbol})
+
+        update_position(
+            symbol,
+            has_long=True,
+            has_short=False
+        )
+
+        price_exec = (
+            result_open.get("_meta", {}).get("price_executed")
+            or float(price)
+        )
+
         update_entry("LONG", price_exec, qty)
 
-    return {"status": "ok", "action": "GIRO_LONG", "close": result_close, "open": result_open}
+        logger.info(f"✅ GIRO_LONG completo [{robot}]")
 
+    else:
+        logger.error(
+            f"❌ GIRO_LONG apertura LONG falló — "
+            f"SHORT cerrado pero LONG no abierto. "
+            f"code={code_open} [{robot}]"
+        )
 
-def _giro_short(symbol: str, price: str, robot: str, payload: dict) -> dict:
+        trigger_emergency(
+            f"GIRO_LONG cerró SHORT pero no abrió LONG: "
+            f"code={code_open} "
+            f"msg={result_open.get('msg')}"
+        )
+
+    return {
+        "status": "ok" if code_open == 0 else "error",
+        "action": "GIRO_LONG",
+        "close": result_close,
+        "open": result_open
+    }
+
+def _giro_short(symbol, price, robot, payload):
     logger.info(f"🔄 GIRO_SHORT {symbol} [{robot}]")
 
     result_close = close_all_positions(symbol, "LONG", robot=robot)
+
+    code_close = result_close.get("code", -1)
+
+    if code_close != 0:
+        logger.error(
+            f"❌ GIRO_SHORT cierre LONG falló — abortando. "
+            f"code={code_close} [{robot}]"
+        )
+
+        trigger_emergency(
+            f"GIRO_SHORT no cerró LONG: "
+            f"code={code_close} "
+            f"msg={result_close.get('msg')}"
+        )
+
+        log_trade(
+            signal="GIRO_SHORT_CLOSE",
+            symbol=symbol,
+            qty=0,
+            price=price,
+            result=result_close,
+            robot=robot,
+            demo=SIMULATION_MODE
+        )
+
+        return {
+            "status": "error",
+            "action": "GIRO_SHORT",
+            "reason": "close_failed",
+            "close": result_close
+        }
+
     time.sleep(GIRO_BUFFER_SECONDS)
 
     qty = _calculate_qty(price, robot)
+
     if qty <= 0:
         return {"status": "error", "reason": "qty_calculation_failed"}
 
-    result_open = place_order(symbol, "SELL", qty, "SHORT", price_signal=float(price), robot=robot)
+    result_open = place_order(
+        symbol,
+        "SELL",
+        qty,
+        "SHORT",
+        price_signal=float(price),
+        robot=robot
+    )
 
-    log_trade(signal="GIRO_SHORT_CLOSE", symbol=symbol, qty=0, price=price,
-              result=result_close, robot=robot, demo=SIMULATION_MODE)
-    log_trade(signal="GIRO_SHORT_OPEN", symbol=symbol, qty=qty, price=price,
-              result=result_open, robot=robot, demo=SIMULATION_MODE)
+    log_trade(
+        signal="GIRO_SHORT_CLOSE",
+        symbol=symbol,
+        qty=0,
+        price=price,
+        result=result_close,
+        robot=robot,
+        demo=SIMULATION_MODE
+    )
 
-    update_state({"last_signal": "GIRO_SHORT", "symbol": symbol})
-    update_position(symbol, has_long=False, has_short=True)
+    log_trade(
+        signal="GIRO_SHORT_OPEN",
+        symbol=symbol,
+        qty=qty,
+        price=price,
+        result=result_open,
+        robot=robot,
+        demo=SIMULATION_MODE
+    )
 
-    if result_open.get("code") == 0:
-        price_exec = result_open.get("_meta", {}).get("price_executed") or float(price)
+    code_open = result_open.get("code", -1)
+
+    if code_open == 0:
+        update_state({"last_signal": "GIRO_SHORT", "symbol": symbol})
+
+        update_position(
+            symbol,
+            has_long=False,
+            has_short=True
+        )
+
+        price_exec = (
+            result_open.get("_meta", {}).get("price_executed")
+            or float(price)
+        )
+
         update_entry("SHORT", price_exec, qty)
 
-    return {"status": "ok", "action": "GIRO_SHORT", "close": result_close, "open": result_open}
+        logger.info(f"✅ GIRO_SHORT completo [{robot}]")
+
+    else:
+        logger.error(
+            f"❌ GIRO_SHORT apertura SHORT falló — "
+            f"LONG cerrado pero SHORT no abierto. "
+            f"code={code_open} [{robot}]"
+        )
+
+        trigger_emergency(
+            f"GIRO_SHORT cerró LONG pero no abrió SHORT: "
+            f"code={code_open} "
+            f"msg={result_open.get('msg')}"
+        )
+
+    return {
+        "status": "ok" if code_open == 0 else "error",
+        "action": "GIRO_SHORT",
+        "close": result_close,
+        "open": result_open
+    }
 
 
 # ============================================================
