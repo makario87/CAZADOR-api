@@ -67,7 +67,11 @@ RECONCILE_INTERVAL     = 30    # Segundos entre reconciliaciones automáticas
 # Configurable desde Render sin tocar codigo.
 # Futuro: config por robot {"CAZADOR": 0.05, "HUNTER": 0.03}
 RISK_PCT = float(os.getenv("RISK_PCT_DEFAULT", "0.05"))  # 5% por defecto
-
+# ============================================================
+# 📈 PIRÁMIDE — control máximo entradas por lado
+# ============================================================
+# Fallback si TV no manda pyramid_max en el JSON
+PYRAMID_MAX_DEFAULT = int(os.getenv("PYRAMID_MAX_DEFAULT", "3"))
 
 # ============================================================
 # 🚨 VALIDACIONES AL ARRANQUE
