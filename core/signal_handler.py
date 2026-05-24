@@ -179,19 +179,34 @@ def _close_long(symbol: str, price: str, robot: str, payload: dict) -> dict:
     result = close_all_positions(symbol, "LONG", robot=robot)
     log_trade(signal="CLOSE_LONG", symbol=symbol, qty=0, price=price,
               result=result, robot=robot, demo=SIMULATION_MODE)
-    update_state({"last_signal": "CLOSE_LONG", "symbol": symbol})
-    update_position(symbol, has_long=False, has_short=False)
-    return {"status": "ok", "action": "CLOSE_LONG", "result": result}
 
+    code = result.get("code", -1)
+    if code == 0:
+        update_state({"last_signal": "CLOSE_LONG", "symbol": symbol})
+        update_position(symbol, has_long=False, has_short=False)
+        logger.info(f"✅ CLOSE_LONG ejecutado y state actualizado [{robot}]")
+    else:
+        logger.error(f"❌ CLOSE_LONG FALLÓ en BingX — state NO actualizado. code={code} msg={result.get('msg')} [{robot}]")
+        trigger_emergency(f"CLOSE_LONG no ejecutó cierre en BingX: code={code} msg={result.get('msg')}")
+
+    return {"status": "ok" if code == 0 else "error", "action": "CLOSE_LONG", "result": result}
 
 def _close_short(symbol: str, price: str, robot: str, payload: dict) -> dict:
     logger.info(f"⬜ CLOSE_SHORT {symbol} [{robot}]")
     result = close_all_positions(symbol, "SHORT", robot=robot)
     log_trade(signal="CLOSE_SHORT", symbol=symbol, qty=0, price=price,
               result=result, robot=robot, demo=SIMULATION_MODE)
-    update_state({"last_signal": "CLOSE_SHORT", "symbol": symbol})
-    update_position(symbol, has_long=False, has_short=False)
-    return {"status": "ok", "action": "CLOSE_SHORT", "result": result}
+
+    code = result.get("code", -1)
+    if code == 0:
+        update_state({"last_signal": "CLOSE_SHORT", "symbol": symbol})
+        update_position(symbol, has_long=False, has_short=False)
+        logger.info(f"✅ CLOSE_SHORT ejecutado y state actualizado [{robot}]")
+    else:
+        logger.error(f"❌ CLOSE_SHORT FALLÓ en BingX — state NO actualizado. code={code} msg={result.get('msg')} [{robot}]")
+        trigger_emergency(f"CLOSE_SHORT no ejecutó cierre en BingX: code={code} msg={result.get('msg')}")
+
+    return {"status": "ok" if code == 0 else "error", "action": "CLOSE_SHORT", "result": result}
 
 
 # ============================================================
