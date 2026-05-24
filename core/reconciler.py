@@ -70,6 +70,22 @@ def _check_state():
         for p in positions
     )
  
+    bingx_long_count = sum(
+        1 for p in positions
+        if p.get("positionSide") == "LONG"
+        and abs(float(p.get("positionAmt", 0))) > 0
+    )
+    bingx_short_count = sum(
+        1 for p in positions
+        if p.get("positionSide") == "SHORT"
+        and abs(float(p.get("positionAmt", 0))) > 0
+    )
+    from data.state import update_state
+    update_state({
+        "bingx_long_count":  bingx_long_count,
+        "bingx_short_count": bingx_short_count,
+    })
+ 
     state        = get_state()
     python_long  = state.get("position_long",  False)
     python_short = state.get("position_short", False)
