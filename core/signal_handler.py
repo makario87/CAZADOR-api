@@ -121,7 +121,7 @@ def handle_signal(payload: dict) -> dict:
         pyramid_current = int(payload.get("pyramid_current", 0))
         pyramid_max     = int(payload.get("pyramid_max", PYRAMID_MAX_DEFAULT))
 
-        if pyramid_current >= pyramid_max:
+        if pyramid_current > pyramid_max:
             logger.warning(
                 f"⛔ {signal} rechazada — pirámide llena: "
                 f"{pyramid_current}/{pyramid_max} [{robot}]"
