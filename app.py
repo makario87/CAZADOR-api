@@ -165,6 +165,50 @@ if __name__ == "__main__":
     update_state({"started_at": format_log_time()})
     load_trades()
     preload_market()
+    # ── Sincronizar pirámide con BingX al arrancar ──────────
+    try:
+        from data.state import update_state
+
+        pos_data = get_positions()
+
+        positions_list = [
+            p for p in (pos_data.get("data") or [])
+            if float(p.get("positionAmt", 0)) != 0
+        ]
+
+        long_count = sum(
+            1 for p in positions_list
+            if p.get("positionSide") == "LONG"
+        )
+
+        short_count = sum(
+            1 for p in positions_list
+            if p.get("positionSide") == "SHORT"
+        )
+
+        if long_count > 0 or short_count > 0:
+
+            update_state({
+                "pyramid_long_count": long_count,
+                "pyramid_short_count": short_count,
+            })
+
+            logger.info(
+                f"📈 Pirámide sincronizada al arrancar — "
+                f"LONG={long_count} SHORT={short_count}"
+            )
+
+        else:
+            logger.info(
+                "📈 Sin posiciones abiertas al arrancar — "
+                "pirámide en 0"
+            )
+
+    except Exception as e:
+        logger.error(
+            f"❌ Error sincronizando pirámide al arrancar: {e}"
+        )
+    # ────────────────────────────────────────────────────────
     
     # Arrancar workers
     start_worker()
