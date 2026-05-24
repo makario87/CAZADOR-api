@@ -115,21 +115,16 @@ def handle_signal(payload: dict) -> dict:
         return {"status": "ignored", "reason": "unknown_signal"}
 
     # ============================================================
-    # 📈 CONTROL PIRÁMIDE — TV vs BingX real
+    # 📈 CONTROL PIRÁMIDE — TV vs BingX (cacheado por reconciliador)
     # ============================================================
     if signal in ("ENTRY_LONG", "ENTRY_SHORT"):
-        from brokers.bingx import get_positions
-
         pyramid_max     = int(payload.get("pyramid_max", PYRAMID_MAX_DEFAULT))
         pyramid_current = int(payload.get("pyramid_current", 0))
         side_check      = "LONG" if signal == "ENTRY_LONG" else "SHORT"
 
-        pos_data    = get_positions(symbol)
-        positions   = pos_data.get("data") or []
-        bingx_count = sum(
-            1 for p in positions
-            if p.get("positionSide") == side_check
-            and abs(float(p.get("positionAmt", 0))) > 0
+        state       = get_state()
+        bingx_count = state.get(
+            "bingx_long_count" if side_check == "LONG" else "bingx_short_count", 0
         )
 
         if pyramid_current != bingx_count:
