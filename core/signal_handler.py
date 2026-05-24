@@ -259,18 +259,36 @@ def _giro_short(symbol: str, price: str, robot: str, payload: dict) -> dict:
 def _sl_long(symbol: str, signal: str, price: str, robot: str, payload: dict) -> dict:
     logger.info(f"🛑 {signal} {symbol} [{robot}]")
     result = close_all_positions(symbol, "LONG", robot=robot)
+    
     log_trade(signal=signal, symbol=symbol, qty=0, price=price,
               result=result, robot=robot, demo=SIMULATION_MODE)
-    update_state({"last_signal": signal, "symbol": symbol})
-    update_position(symbol, has_long=False, has_short=False)
-    return {"status": "ok", "action": signal, "result": result}
+    
+    code = result.get("code", -1)
+    if code == 0:
+        update_state({"last_signal": signal, "symbol": symbol})
+        update_position(symbol, has_long=False, has_short=False)
+        logger.info(f"✅ {signal} ejecutado y state actualizado [{robot}]")
+    else:
+        logger.error(f"❌ {signal} FALLÓ en BingX — state NO actualizado. code={code} msg={result.get('msg')} [{robot}]")
+        trigger_emergency(f"{signal} no ejecutó cierre en BingX: code={code} msg={result.get('msg')}")
+    
+    return {"status": "ok" if code == 0 else "error", "action": signal, "result": result}
 
 
 def _sl_short(symbol: str, signal: str, price: str, robot: str, payload: dict) -> dict:
     logger.info(f"🛑 {signal} {symbol} [{robot}]")
     result = close_all_positions(symbol, "SHORT", robot=robot)
+    
     log_trade(signal=signal, symbol=symbol, qty=0, price=price,
               result=result, robot=robot, demo=SIMULATION_MODE)
-    update_state({"last_signal": signal, "symbol": symbol})
-    update_position(symbol, has_long=False, has_short=False)
-    return {"status": "ok", "action": signal, "result": result}
+    
+    code = result.get("code", -1)
+    if code == 0:
+        update_state({"last_signal": signal, "symbol": symbol})
+        update_position(symbol, has_long=False, has_short=False)
+        logger.info(f"✅ {signal} ejecutado y state actualizado [{robot}]")
+    else:
+        logger.error(f"❌ {signal} FALLÓ en BingX — state NO actualizado. code={code} msg={result.get('msg')} [{robot}]")
+        trigger_emergency(f"{signal} no ejecutó cierre en BingX: code={code} msg={result.get('msg')}")
+    
+    return {"status": "ok" if code == 0 else "error", "action": signal, "result": result}
