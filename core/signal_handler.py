@@ -80,14 +80,23 @@ def _calculate_qty(price_str: str, robot: str = "") -> float:
 # 🚀 DISPATCHER PRINCIPAL
 # ============================================================
 
+# Señales que NUNCA se bloquean aunque haya emergencia
+PROTECTION_SIGNALS = {
+    "CLOSE_LONG", "CLOSE_SHORT",
+    "GIRO_LONG", "GIRO_SHORT",
+    "SL_LONG_DYNAMIC", "SL_SHORT_DYNAMIC",
+    "SL_LONG_BLACK", "SL_SHORT_BLACK",
+    "SL_LONG_CCI", "SL_SHORT_CCI",
+    "SL_LONG_PROMEDIO", "SL_SHORT_PROMEDIO",
+    "SL_LONG_LAST", "SL_SHORT_LAST",
+}
+
 def handle_signal(payload: dict) -> dict:
     signal = payload.get("signal", "").upper()
     symbol = payload.get("symbol", "")
     price  = payload.get("price", "0")
     robot  = payload.get("robot", "CAZADOR")
 
-    # qty de TV ignorada para ENTRY — Python la calcula
-    # Para CLOSE/SL/GIRO: qty viene de la posición real en BingX
     logger.info(f"📨 Señal recibida: {signal} | {symbol} | price={price} | robot={robot}")
 
     if signal not in VALID_SIGNALS:
@@ -96,8 +105,11 @@ def handle_signal(payload: dict) -> dict:
 
     state = get_state()
     if state.get("emergency"):
-        logger.error(f"🚨 EMERGENCIA ACTIVA — señal bloqueada: {signal}")
-        return {"status": "blocked", "reason": "emergency_active"}
+        if signal in PROTECTION_SIGNALS:
+            logger.warning(f"⚠️ EMERGENCIA ACTIVA pero señal de protección — ejecutando igualmente: {signal}")
+        else:
+            logger.error(f"🚨 EMERGENCIA ACTIVA — señal bloqueada: {signal}")
+            return {"status": "blocked", "reason": "emergency_active"}
 
     try:
         if signal == "ENTRY_LONG":
