@@ -115,29 +115,11 @@ def handle_signal(payload: dict) -> dict:
         return {"status": "ignored", "reason": "unknown_signal"}
 
     # ============================================================
-    # 📈 CONTROL PIRÁMIDE — TV vs BingX (cacheado por reconciliador)
+    # 📈 CONTROL PIRÁMIDE — TV es la fuente de verdad
     # ============================================================
     if signal in ("ENTRY_LONG", "ENTRY_SHORT"):
-        pyramid_max     = int(payload.get("pyramid_max", PYRAMID_MAX_DEFAULT))
         pyramid_current = int(payload.get("pyramid_current", 0))
-        side_check      = "LONG" if signal == "ENTRY_LONG" else "SHORT"
-
-        state       = get_state()
-        bingx_count = state.get(
-            "bingx_long_count" if side_check == "LONG" else "bingx_short_count", 0
-        )
-
-        if pyramid_current != bingx_count:
-            logger.warning(
-                f"⚠️ Desincronía pirámide — TV={pyramid_current} "
-                f"BingX={bingx_count} — ENTRY bloqueada [{robot}]"
-            )
-            return {
-                "status": "rejected",
-                "reason": "pyramid_desync",
-                "tv":     pyramid_current,
-                "bingx":  bingx_count
-            }
+        pyramid_max     = int(payload.get("pyramid_max", PYRAMID_MAX_DEFAULT))
 
         if pyramid_current >= pyramid_max:
             logger.warning(
@@ -145,10 +127,10 @@ def handle_signal(payload: dict) -> dict:
                 f"{pyramid_current}/{pyramid_max} [{robot}]"
             )
             return {
-                "status": "rejected",
-                "reason": "pyramid_full",
-                "count":  pyramid_current,
-                "max":    pyramid_max
+                "status":  "rejected",
+                "reason":  "pyramid_full",
+                "current": pyramid_current,
+                "max":     pyramid_max
             }
 
     # ============================================================
