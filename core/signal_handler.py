@@ -115,51 +115,50 @@ def handle_signal(payload: dict) -> dict:
         return {"status": "ignored", "reason": "unknown_signal"}
 
     # ============================================================
-    # 📈 CONTROL PIRÁMIDE — solo para ENTRY
+    # 📈 CONTROL PIRÁMIDE — TV vs BingX real
     # ============================================================
     if signal in ("ENTRY_LONG", "ENTRY_SHORT"):
+        from brokers.bingx import get_positions
 
-        pyramid_max = int(
-            payload.get("pyramid_max", PYRAMID_MAX_DEFAULT)
+        pyramid_max     = int(payload.get("pyramid_max", PYRAMID_MAX_DEFAULT))
+        pyramid_current = int(payload.get("pyramid_current", 0))
+        side_check      = "LONG" if signal == "ENTRY_LONG" else "SHORT"
+
+        pos_data    = get_positions(symbol)
+        positions   = pos_data.get("data") or []
+        bingx_count = sum(
+            1 for p in positions
+            if p.get("positionSide") == side_check
+            and abs(float(p.get("positionAmt", 0))) > 0
         )
 
-        state = get_state()
+        if pyramid_current != bingx_count:
+            logger.warning(
+                f"⚠️ Desincronía pirámide — TV={pyramid_current} "
+                f"BingX={bingx_count} — ENTRY bloqueada [{robot}]"
+            )
+            return {
+                "status": "rejected",
+                "reason": "pyramid_desync",
+                "tv":     pyramid_current,
+                "bingx":  bingx_count
+            }
 
-        if signal == "ENTRY_LONG":
+        if pyramid_current >= pyramid_max:
+            logger.warning(
+                f"⛔ {signal} rechazada — pirámide llena: "
+                f"{pyramid_current}/{pyramid_max} [{robot}]"
+            )
+            return {
+                "status": "rejected",
+                "reason": "pyramid_full",
+                "count":  pyramid_current,
+                "max":    pyramid_max
+            }
 
-            count = state.get("pyramid_long_count", 0)
-
-            if count >= pyramid_max:
-
-                logger.warning(
-                    f"⛔ ENTRY_LONG rechazada — pirámide llena: "
-                    f"{count}/{pyramid_max} [{robot}]"
-                )
-
-                return {
-                    "status": "rejected",
-                    "reason": "pyramid_full",
-                    "count": count,
-                    "max": pyramid_max
-                }
-
-        elif signal == "ENTRY_SHORT":
-
-            count = state.get("pyramid_short_count", 0)
-
-            if count >= pyramid_max:
-
-                logger.warning(
-                    f"⛔ ENTRY_SHORT rechazada — pirámide llena: "
-                    f"{count}/{pyramid_max} [{robot}]"
-                )
-
-                return {
-                    "status": "rejected",
-                    "reason": "pyramid_full",
-                    "count": count,
-                    "max": pyramid_max
-                }
+    # ============================================================
+    # 🚨 CONTROL EMERGENCIA
+    # ============================================================
     state = get_state()
     if state.get("emergency"):
         if signal in PROTECTION_SIGNALS:
@@ -192,7 +191,6 @@ def handle_signal(payload: dict) -> dict:
         return {"status": "error", "reason": str(e)}
 
     return {"status": "ok"}
-
 
 # ============================================================
 # 📈 ENTRADAS — qty calculada por Python
