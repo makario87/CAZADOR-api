@@ -46,6 +46,9 @@ _state = {
     "entry_price_short":     None,   # precio medio entrada SHORT
     "entry_qty_long":        None,   # qty total abierta LONG
     "entry_qty_short":       None,   # qty total abierta SHORT
+    # — control pirámide —
+    "pyramid_long_count":    0,
+    "pyramid_short_count":   0,
 }
 
 # ============================================================
@@ -126,6 +129,8 @@ def reset_state():
             "entry_price_short":     None,
             "entry_qty_long":        None,
             "entry_qty_short":       None,
+            "pyramid_long_count":    0,
+            "pyramid_short_count":   0,
         })
     save_state()
     logger.info("🔄 Estado reseteado completamente")
@@ -143,9 +148,11 @@ def update_position(symbol: str, has_long: bool, has_short: bool):
         if not has_long:
             _state["entry_price_long"] = None
             _state["entry_qty_long"]   = None
+            _state["pyramid_long_count"] = 0
         if not has_short:
             _state["entry_price_short"] = None
             _state["entry_qty_short"]   = None
+            _state["pyramid_short_count"] = 0
     save_state()
     logger.info(
         f"📍 Posición actualizada: "
@@ -176,3 +183,18 @@ def update_entry(side: str, price: float, qty: float):
             _state["entry_price_short"] = round(avg_price, 8)
     save_state()
     logger.info(f"📍 Entrada registrada: {side} qty={qty} price={price}")
+
+def increment_pyramid(side: str):
+    """Incrementa el contador de pirámide al abrir una entrada."""
+    with _lock:
+        if side == "LONG":
+            _state["pyramid_long_count"] += 1
+            count = _state["pyramid_long_count"]
+
+        elif side == "SHORT":
+            _state["pyramid_short_count"] += 1
+            count = _state["pyramid_short_count"]
+
+    save_state()
+
+    logger.info(f"📈 Pirámide {side}: {count} entradas abiertas")
