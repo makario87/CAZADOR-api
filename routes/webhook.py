@@ -40,7 +40,15 @@ def receive_signal():
         return jsonify({"error": "Missing signal"}), 400
 
     if is_signal_expired(payload.get("time", "")):
+        logger.warning(
+            f"⏰ Señal EXPIRADA y descartada: "
+            f"{signal} | "
+            f"symbol={payload.get('symbol')} | "
+            f"tv_time={payload.get('time')}"
+        )
+    
         record_webhook(signal + "_EXPIRED", ok=False)
+    
         return jsonify({"status": "expired"}), 200
 
     record_webhook(signal, ok=True)
