@@ -235,7 +235,7 @@ def close_position(
         positions = pos_data.get("data") or []
         pos = next(
             (p for p in positions
-             if p.get("positionSide") == position_side and float(p.get("positionAmt", 0)) > 0),
+             if p.get("positionSide") == position_side and abs(float(p.get("positionAmt", 0))) > 0),
             None
         )
         if not pos:
