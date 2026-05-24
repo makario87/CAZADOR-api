@@ -228,20 +228,41 @@ def close_position(
     """
     if SIMULATION_MODE:
         logger.info(f"🧪 SIMULATION — [{robot}] CLOSE {position_side} {symbol} qty={quantity}")
-        return {"simulation": True, "code": 0, "action": "close", "position_side": position_side, "symbol": symbol}
-
+        return {
+            "simulation": True,
+            "code": 0,
+            "action": "close",
+            "position_side": position_side,
+            "symbol": symbol
+        }
+    
     if quantity is None:
         pos_data = get_positions(symbol)
         positions = pos_data.get("data") or []
+    
+        logger.info(f"🔍 [{robot}] Buscando {position_side} entre {len(positions)} posiciones para {symbol}")
+    
+        for p in positions:
+            logger.debug(
+                f"   → symbol={p.get('symbol')} "
+                f"side={p.get('positionSide')} "
+                f"amt={p.get('positionAmt')}"
+            )
+    
         pos = next(
             (p for p in positions
-             if p.get("positionSide") == position_side and abs(float(p.get("positionAmt", 0))) > 0),
+             if p.get("positionSide") == position_side
+             and abs(float(p.get("positionAmt", 0))) > 0),
             None
         )
+    
         if not pos:
             logger.warning(f"⚠️ [{robot}] CLOSE {position_side} {symbol} — no hay posición abierta")
             return {"code": -1, "msg": "no_open_position"}
+    
         quantity = abs(float(pos.get("positionAmt", 0)))
+    
+        logger.info(f"🔍 [{robot}] Posición encontrada: {position_side} qty={quantity}")
 
     close_side = "SELL" if position_side == "LONG" else "BUY"
     return place_order(
