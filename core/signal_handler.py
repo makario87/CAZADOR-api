@@ -5,9 +5,20 @@ TradingView manda solo la señal. Python calcula la qty.
 """
 import time
 from brokers.bingx import place_order, close_all_positions, get_balance
-from data.state import get_state, update_state, update_position, update_entry
+from data.state import (
+    get_state,
+    update_state,
+    update_position,
+    update_entry,
+    increment_pyramid
+)
 from core.emergency import trigger_emergency
-from config.settings import GIRO_BUFFER_SECONDS, SIMULATION_MODE, RISK_PCT
+from config.settings import (
+    GIRO_BUFFER_SECONDS,
+    SIMULATION_MODE,
+    RISK_PCT,
+    PYRAMID_MAX_DEFAULT
+)
 from logs.logger import get_logger
 from data.trade_log import log_trade
 
@@ -103,6 +114,52 @@ def handle_signal(payload: dict) -> dict:
         logger.warning(f"⚠️ Señal desconocida ignorada: {signal}")
         return {"status": "ignored", "reason": "unknown_signal"}
 
+    # ============================================================
+    # 📈 CONTROL PIRÁMIDE — solo para ENTRY
+    # ============================================================
+    if signal in ("ENTRY_LONG", "ENTRY_SHORT"):
+
+        pyramid_max = int(
+            payload.get("pyramid_max", PYRAMID_MAX_DEFAULT)
+        )
+
+        state = get_state()
+
+        if signal == "ENTRY_LONG":
+
+            count = state.get("pyramid_long_count", 0)
+
+            if count >= pyramid_max:
+
+                logger.warning(
+                    f"⛔ ENTRY_LONG rechazada — pirámide llena: "
+                    f"{count}/{pyramid_max} [{robot}]"
+                )
+
+                return {
+                    "status": "rejected",
+                    "reason": "pyramid_full",
+                    "count": count,
+                    "max": pyramid_max
+                }
+
+        elif signal == "ENTRY_SHORT":
+
+            count = state.get("pyramid_short_count", 0)
+
+            if count >= pyramid_max:
+
+                logger.warning(
+                    f"⛔ ENTRY_SHORT rechazada — pirámide llena: "
+                    f"{count}/{pyramid_max} [{robot}]"
+                )
+
+                return {
+                    "status": "rejected",
+                    "reason": "pyramid_full",
+                    "count": count,
+                    "max": pyramid_max
+                }
     state = get_state()
     if state.get("emergency"):
         if signal in PROTECTION_SIGNALS:
@@ -177,6 +234,7 @@ def _entry_long(symbol: str, price: str, robot: str, payload: dict) -> dict:
         price_exec = result.get("_meta", {}).get("price_executed") or float(price)
 
         update_entry("LONG", price_exec, qty)
+        increment_pyramid("LONG")
 
         logger.info(f"✅ ENTRY_LONG ejecutado y state actualizado [{robot}]")
 
@@ -230,7 +288,8 @@ def _entry_short(symbol: str, price: str, robot: str, payload: dict) -> dict:
         price_exec = result.get("_meta", {}).get("price_executed") or float(price)
 
         update_entry("SHORT", price_exec, qty)
-
+        increment_pyramid("SHORT")
+        
         logger.info(f"✅ ENTRY_SHORT ejecutado y state actualizado [{robot}]")
 
     else:
