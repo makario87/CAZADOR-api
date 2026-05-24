@@ -162,6 +162,10 @@ if __name__ == "__main__":
         logger.warning("⚠️ Arrancando en modo demo por errores de config")
     # Cargar estado persistente
     load_state()
+    # Inicializar contadores BingX en 0 si no existen
+    state = get_state()
+    if "bingx_long_count" not in state:
+        update_state({"bingx_long_count": 0, "bingx_short_count": 0})
     update_state({"started_at": format_log_time()})
     load_trades()
     preload_market()
@@ -187,18 +191,21 @@ if __name__ == "__main__":
         )
 
         if long_count > 0 or short_count > 0:
-
             update_state({
-                "pyramid_long_count": long_count,
+                "pyramid_long_count":  long_count,
                 "pyramid_short_count": short_count,
+                "bingx_long_count":    long_count,
+                "bingx_short_count":   short_count,
             })
-
             logger.info(
                 f"📈 Pirámide sincronizada al arrancar — "
                 f"LONG={long_count} SHORT={short_count}"
             )
-
         else:
+            update_state({
+                "bingx_long_count":  0,
+                "bingx_short_count": 0,
+            })
             logger.info(
                 "📈 Sin posiciones abiertas al arrancar — "
                 "pirámide en 0"
