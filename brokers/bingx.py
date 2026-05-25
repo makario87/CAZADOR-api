@@ -38,6 +38,8 @@ def normalize_symbol(symbol: str) -> str:
     1000PEPEUSDT.P → 1000PEPE-USDT
     Si ya tiene guión se devuelve tal cual.
     """
+    if not symbol or not symbol.strip():
+        return ""
     # Limpiar sufijos de TradingView
     clean = symbol.upper().replace(".P", "").replace(".PERP", "").strip()
 
