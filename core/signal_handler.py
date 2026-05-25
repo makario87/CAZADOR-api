@@ -10,7 +10,9 @@ from data.state import (
     update_state,
     update_position,
     update_entry,
-    increment_pyramid
+    increment_pyramid,
+    update_bar_time,
+    get_bar_time
 )
 from core.emergency import trigger_emergency
 from config.settings import (
@@ -135,10 +137,12 @@ def handle_signal(payload: dict) -> dict:
 
         signal_time = payload.get("time", "")
         signal_tf   = payload.get("tf", "")
-        state       = get_state()
-
-        if (signal_time and signal_time == state.get("last_entry_bar_time")
-                and signal_tf == state.get("last_entry_bar_tf")):
+        
+        last_bar_time, last_bar_tf = get_bar_time(symbol)
+        
+        if (signal_time and signal_time == last_bar_time
+                and signal_tf == last_bar_tf):
+                    
             logger.warning(
                 f"⛔ {signal} rechazada — ya hubo entrada en esta vela "
                 f"[time={signal_time} tf={signal_tf}] [{robot}]"
@@ -225,12 +229,9 @@ def _entry_long(symbol: str, price: str, robot: str, payload: dict) -> dict:
 
         price_exec = result.get("_meta", {}).get("price_executed") or float(price)
 
-        update_entry("LONG", price_exec, qty)
-        increment_pyramid("LONG")
-        update_state({
-            "last_entry_bar_time": payload.get("time", ""),
-            "last_entry_bar_tf":   payload.get("tf", ""),
-        })
+        update_entry(symbol, "LONG", price_exec, qty)
+        increment_pyramid(symbol, "LONG")
+        update_bar_time(symbol, payload.get("time", ""), payload.get("tf", ""))
 
         logger.info(f"✅ ENTRY_LONG ejecutado y state actualizado [{robot}]")
 
@@ -283,12 +284,9 @@ def _entry_short(symbol: str, price: str, robot: str, payload: dict) -> dict:
 
         price_exec = result.get("_meta", {}).get("price_executed") or float(price)
 
-        update_entry("SHORT", price_exec, qty)
-        increment_pyramid("SHORT")
-        update_state({
-            "last_entry_bar_time": payload.get("time", ""),
-            "last_entry_bar_tf":   payload.get("tf", ""),
-        })
+        update_entry(symbol, "SHORT", price_exec, qty)
+        increment_pyramid(symbol, "SHORT")
+        update_bar_time(symbol, payload.get("time", ""), payload.get("tf", ""))
         
         logger.info(f"✅ ENTRY_SHORT ejecutado y state actualizado [{robot}]")
 
@@ -427,7 +425,7 @@ def _giro_long(symbol, price, robot, payload):
             or float(price)
         )
 
-        update_entry("LONG", price_exec, qty)
+        update_entry(symbol, "LONG", price_exec, qty)
 
         logger.info(f"✅ GIRO_LONG completo [{robot}]")
 
@@ -519,7 +517,7 @@ def _giro_short(symbol, price, robot, payload):
             or float(price)
         )
 
-        update_entry("SHORT", price_exec, qty)
+        update_entry(symbol, "SHORT", price_exec, qty)
 
         logger.info(f"✅ GIRO_SHORT completo [{robot}]")
 
