@@ -200,6 +200,40 @@ def get_balance() -> dict:
         logger.error(f"❌ Balance error: code={data.get('code')} msg={data.get('msg')}")
     return data
 
+def ping_bingx() -> bool:
+    """
+    Comprueba conectividad básica con BingX.
+    Retorna True si BingX responde code=0, False si no.
+    Usado por el watchdog en emergency.py.
+    """
+
+    try:
+
+        data = _get(
+            "/openApi/swap/v2/user/balance",
+            {"currency": "USDT"}
+        )
+
+        ok = data.get("code") == 0
+
+        if not ok:
+
+            logger.warning(
+                f"⚠️ ping_bingx — "
+                f"code={data.get('code')} "
+                f"msg={data.get('msg')}"
+            )
+
+        return ok
+
+    except Exception as e:
+
+        logger.error(
+            f"❌ ping_bingx — excepción: {e}"
+        )
+
+        return False
+
 def get_positions(symbol: str = "") -> dict:
     
     params = {}
