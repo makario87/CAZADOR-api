@@ -35,7 +35,14 @@ def is_alive() -> bool:
 # ============================================================
 # 🔄 LOOP
 # ============================================================
+_is_running = False
+
 def _reconcile_loop():
+    global _is_running
+    if _is_running:
+        logger.warning("⚠️ Reconciliador ya corriendo — ignorando segunda instancia")
+        return
+    _is_running = True
     while True:
         try:
             time.sleep(RECONCILE_INTERVAL)
@@ -47,6 +54,7 @@ def _reconcile_loop():
 # 🔍 CHECK REAL
 # ============================================================
 def _check_state():
+    time.sleep(2)
     record_reconciler()
  
     bingx_data = get_positions()
