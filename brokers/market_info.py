@@ -87,10 +87,11 @@ def round_qty(symbol: str, qty: float) -> float:
     info  = cache.get(symbol)
 
     if not info:
-        # Símbolo no encontrado — fallback: entero
-        logger.warning(f"⚠️ market_info: {symbol} no encontrado en contratos — usando entero")
-        rounded = float(int(qty))
-        return max(1.0, rounded)
+        # Símbolo no encontrado — devolver qty sin forzar mínimo 1
+        # max(1.0, ...) es peligroso para activos de precio alto (BTC, ETH)
+        # La validación de min_qty real la hace _calculate_qty() en signal_handler
+        logger.warning(f"⚠️ market_info: {symbol} no encontrado en contratos — devolviendo qty sin redondear")
+        return round(qty, 8)
 
     precision = info["quantity_precision"]
     min_qty   = info["min_qty"]
@@ -131,6 +132,22 @@ def format_qty(symbol: str, qty: float) -> str:
 def get_symbol_info(symbol: str) -> dict:
     """Devuelve info completa del contrato. Útil para logs y debugging."""
     return _get_cache().get(symbol, {})
+
+def get_min_qty(symbol: str) -> float:
+    """
+    Devuelve min_qty real del contrato según BingX.
+    Usado por _calculate_qty() en signal_handler para rechazar
+    órdenes imposibles antes de mandarlas al broker.
+
+    Si el símbolo no está en caché devuelve 0.0 — significa
+    que no podemos validar, _calculate_qty() decidirá.
+    """
+    cache = _get_cache()
+    info  = cache.get(symbol)
+    if not info:
+        logger.warning(f"⚠️ get_min_qty: {symbol} no encontrado — devolviendo 0.0")
+        return 0.0
+    return info["min_qty"]
 
 def preload():
     """Precarga caché al arrancar el sistema."""
