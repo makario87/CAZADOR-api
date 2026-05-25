@@ -49,6 +49,9 @@ _state = {
     # — control pirámide —
     "pyramid_long_count":    0,
     "pyramid_short_count":   0,
+    # — anti-duplicados por vela —
+    "last_entry_bar_time":   None,  # timestamp de la última entrada ejecutada
+    "last_entry_bar_tf":     None,  # timeframe de la última entrada ejecutada
 }
 
 # ============================================================
@@ -131,6 +134,8 @@ def reset_state():
             "entry_qty_short":       None,
             "pyramid_long_count":    0,
             "pyramid_short_count":   0,
+            "last_entry_bar_time": None,
+            "last_entry_bar_tf":   None,
         })
     save_state()
     logger.info("🔄 Estado reseteado completamente")
