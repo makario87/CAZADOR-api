@@ -196,6 +196,7 @@ def get_balance() -> dict:
     return data
 
 def get_positions(symbol: str = "") -> dict:
+    
     params = {}
     if symbol:
         params["symbol"] = normalize_symbol(symbol)
@@ -206,6 +207,35 @@ def get_positions(symbol: str = "") -> dict:
     else:
         logger.error(f"❌ Positions error: code={data.get('code')} msg={data.get('msg')}")
     return data
+
+def get_order_history(symbol: str, limit: int = 20) -> list:
+    """
+    Devuelve las últimas N órdenes cerradas/ejecutadas en BingX para un símbolo.
+    Usado por reconciler.py para detectar cierres manuales.
+    
+    Endpoint: GET /openApi/swap/v2/trade/allOrders
+    Retorna: lista de órdenes (puede estar vacía si falla)
+    Cada orden incluye: orderId, clientOrderId, side, positionSide, status, etc.
+    """
+    params = {
+        "symbol": normalize_symbol(symbol),
+        "limit":  limit,
+    }
+    data = _get("/openApi/swap/v2/trade/allOrders", params)
+
+    if data.get("code") == 0:
+        orders = data.get("data", {}).get("orders") or []
+        logger.info(
+            f"📜 [{BINGX_ENV.upper()}] Historial órdenes {normalize_symbol(symbol)} "
+            f"— {len(orders)} registros"
+        )
+        return orders
+    else:
+        logger.error(
+            f"❌ get_order_history {normalize_symbol(symbol)} — "
+            f"code={data.get('code')} msg={data.get('msg')}"
+        )
+        return [] 
 
 
 # ============================================================
@@ -284,6 +314,9 @@ def place_order(
             "order_id":         order.get("orderId"),
             "client_order_id":  client_order_id,
         }
+        # Registrar nuestro clientOrderID para detección de cierres manuales
+        from data.state import register_our_order
+        register_our_order(client_order_id)
     else:
         logger.error(
             f"❌ [{BINGX_ENV.upper()}][{robot}] ORDER FAILED — {side} {position_side} {symbol} "
