@@ -7,7 +7,12 @@ from config.settings import DEMO_MODE, validate
 from routes.webhook import webhook_bp
 from core.queue_manager import start_worker
 from core.reconciler import start_reconciler
-from core.emergency import resolve_emergency, is_emergency
+from core.emergency import (
+    resolve_emergency,
+    is_emergency,
+    is_watchdog_alive,
+    get_consecutive_fails,
+)
 from data.state import get_state, reset_state, load_state, update_state
 from brokers.market_info import preload as preload_market
 from data.trade_log import (
