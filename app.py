@@ -216,10 +216,13 @@ if __name__ == "__main__":
             f"❌ Error sincronizando pirámide al arrancar: {e}"
         )
     # ────────────────────────────────────────────────────────
-    
     # Arrancar workers
+    from core.emergency import start_watchdog
+    
     start_worker()
     start_reconciler()
+    start_watchdog()
+    
 
     logger.info("✅ Sistema listo")
     app.run(host="0.0.0.0", port=5000, debug=False)
