@@ -52,6 +52,7 @@ _state = {
     # — anti-duplicados por vela —
     "last_entry_bar_time":   None,  # timestamp de la última entrada ejecutada
     "last_entry_bar_tf":     None,  # timeframe de la última entrada ejecutada
+    "our_client_order_ids": [],
 }
 
 # ============================================================
@@ -136,6 +137,7 @@ def reset_state():
             "pyramid_short_count":   0,
             "last_entry_bar_time": None,
             "last_entry_bar_tf":   None,
+            "our_client_order_ids": [],
         })
     save_state()
     logger.info("🔄 Estado reseteado completamente")
@@ -203,3 +205,19 @@ def increment_pyramid(side: str):
     save_state()
 
     logger.info(f"📈 Pirámide {side}: {count} entradas abiertas")
+
+def register_our_order(client_order_id: str):
+    """Guarda nuestros clientOrderID recientes. Máximo 20."""
+    if not client_order_id:
+        return
+
+    with _lock:
+        ids = _state.get("our_client_order_ids", [])
+
+        if client_order_id not in ids:
+            ids.append(client_order_id)
+
+        _state["our_client_order_ids"] = ids[-20:]
+
+    save_state()
+    logger.info(f"🧾 clientOrderID registrado: {client_order_id}")
