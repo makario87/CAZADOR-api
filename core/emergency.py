@@ -6,6 +6,8 @@ TODO: añadir notificaciones (email/Telegram).
 """
 from data.state import update_state
 from logs.logger import get_logger
+import threading
+import time
 
 logger = get_logger(__name__)
 
@@ -30,3 +32,84 @@ def resolve_emergency():
 def is_emergency() -> bool:
     from data.state import get_state
     return get_state().get("emergency", False)
+
+# ============================================================
+# 🐕 WATCHDOG — #5
+# ============================================================
+
+_WATCHDOG_INTERVAL      = 60
+_WATCHDOG_MAX_FAILURES  = 3
+
+_watchdog_thread   = None
+_consecutive_fails = 0
+
+
+def start_watchdog():
+    """Arranca el hilo watchdog."""
+    global _watchdog_thread
+
+    if _watchdog_thread and _watchdog_thread.is_alive():
+        return
+
+    _watchdog_thread = threading.Thread(
+        target=_watchdog_loop,
+        daemon=True
+    )
+
+    _watchdog_thread.start()
+
+    logger.info(
+        f"🐕 Watchdog BingX arrancado "
+        f"(cada {_WATCHDOG_INTERVAL}s, "
+        f"max_fails={_WATCHDOG_MAX_FAILURES})"
+    )
+
+
+def _watchdog_loop():
+    global _consecutive_fails
+
+    while True:
+        try:
+            time.sleep(_WATCHDOG_INTERVAL)
+            _check_bingx_connection()
+
+        except Exception as e:
+            logger.error(f"❌ Error en watchdog loop: {e}")
+
+
+def _check_bingx_connection():
+    global _consecutive_fails
+
+    from brokers.bingx import ping_bingx
+
+    ok = ping_bingx()
+
+    if ok:
+
+        if _consecutive_fails > 0:
+            logger.info(
+                f"✅ Watchdog — BingX recuperado "
+                f"tras {_consecutive_fails} fallo(s)"
+            )
+
+        _consecutive_fails = 0
+        return
+
+    _consecutive_fails += 1
+
+    logger.warning(
+        f"⚠️ Watchdog — BingX no responde "
+        f"(fallo {_consecutive_fails}/"
+        f"{_WATCHDOG_MAX_FAILURES})"
+    )
+
+    if _consecutive_fails >= _WATCHDOG_MAX_FAILURES:
+
+        if not is_emergency():
+
+            trigger_emergency(
+                f"Watchdog: BingX sin respuesta "
+                f"{_consecutive_fails} veces consecutivas"
+            )
+
+        _consecutive_fails = 0
