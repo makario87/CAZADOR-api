@@ -25,34 +25,37 @@ STATE_FILE = "/tmp/cazador_state.json"
 
 _lock  = threading.Lock()
 _state = {
-    "emergency":             False,
-    "emergency_reason":      None,
-    "last_signal":           None,
-    "symbol":                None,
-    "blocked":               False,
-    "last_webhook_time":     None,
-    "last_reconciler_time":  None,
-    "last_webhook_signal":   None,
-    "webhooks_received":     0,
-    "webhooks_ok":           0,
-    "webhooks_failed":       0,
-    "started_at":            None,
+    "emergency":                    False,
+    "emergency_reason":             None,
+    "last_signal":                  None,
+    "symbol":                       None,
+    "blocked":                      False,
+    "last_webhook_time":            None,
+    "last_reconciler_time":         None,
+    "last_webhook_signal":          None,
+    "webhooks_received":            0,
+    "webhooks_ok":                  0,
+    "webhooks_failed":              0,
+    "started_at":                   None,
     # — posición activa —
-    "position_long":         False,
-    "position_short":        False,
-    "position_symbol":       None,
+    "position_long":                False,
+    "position_short":               False,
+    "position_symbol":              None,
     # — datos entrada para PnL futuro —
-    "entry_price_long":      None,   # precio medio entrada LONG
-    "entry_price_short":     None,   # precio medio entrada SHORT
-    "entry_qty_long":        None,   # qty total abierta LONG
-    "entry_qty_short":       None,   # qty total abierta SHORT
+    "entry_price_long":             None,
+    "entry_price_short":            None,
+    "entry_qty_long":               None,
+    "entry_qty_short":              None,
     # — control pirámide —
-    "pyramid_long_count":    0,
-    "pyramid_short_count":   0,
+    "pyramid_long_count":           0,
+    "pyramid_short_count":          0,
     # — anti-duplicados por vela —
-    "last_entry_bar_time":   None,  # timestamp de la última entrada ejecutada
-    "last_entry_bar_tf":     None,  # timeframe de la última entrada ejecutada
-    "our_client_order_ids": [],
+    "last_entry_bar_time":          None,
+    "last_entry_bar_tf":            None,
+    # — detección actividad externa (#3/#4) —
+    "our_client_order_ids":         [],   # últimos 20 clientOrderID nuestros
+    "manual_close_detected":        False, # reconciler detectó cierre manual
+    "external_activity_detected":   False, # reconciler detectó huérfana/actividad externa
 }
 
 # ============================================================
@@ -76,8 +79,10 @@ def load_state():
             saved = json.load(f)
             _state.update(saved)
         logger.info(f"✅ Estado restaurado desde disco: {STATE_FILE}")
-        logger.info(f"   last_signal: {_state.get('last_signal')}")
-        logger.info(f"   emergency:   {_state.get('emergency')}")
+        logger.info(f"   last_signal:              {_state.get('last_signal')}")
+        logger.info(f"   emergency:                {_state.get('emergency')}")
+        logger.info(f"   manual_close_detected:    {_state.get('manual_close_detected')}")
+        logger.info(f"   external_activity_detected: {_state.get('external_activity_detected')}")
     except Exception as e:
         logger.error(f"❌ Error cargando estado: {e} — arrancando desde cero")
 
@@ -114,30 +119,32 @@ def record_reconciler():
 def reset_state():
     with _lock:
         _state.update({
-            "emergency":             False,
-            "emergency_reason":      None,
-            "last_signal":           None,
-            "symbol":                None,
-            "blocked":               False,
-            "last_webhook_time":     None,
-            "last_reconciler_time":  None,
-            "last_webhook_signal":   None,
-            "webhooks_received":     0,
-            "webhooks_ok":           0,
-            "webhooks_failed":       0,
-            "started_at":            format_log_time(),
-            "position_long":         False,
-            "position_short":        False,
-            "position_symbol":       None,
-            "entry_price_long":      None,
-            "entry_price_short":     None,
-            "entry_qty_long":        None,
-            "entry_qty_short":       None,
-            "pyramid_long_count":    0,
-            "pyramid_short_count":   0,
-            "last_entry_bar_time": None,
-            "last_entry_bar_tf":   None,
-            "our_client_order_ids": [],
+            "emergency":                    False,
+            "emergency_reason":             None,
+            "last_signal":                  None,
+            "symbol":                       None,
+            "blocked":                      False,
+            "last_webhook_time":            None,
+            "last_reconciler_time":         None,
+            "last_webhook_signal":          None,
+            "webhooks_received":            0,
+            "webhooks_ok":                  0,
+            "webhooks_failed":              0,
+            "started_at":                   format_log_time(),
+            "position_long":                False,
+            "position_short":               False,
+            "position_symbol":              None,
+            "entry_price_long":             None,
+            "entry_price_short":            None,
+            "entry_qty_long":               None,
+            "entry_qty_short":              None,
+            "pyramid_long_count":           0,
+            "pyramid_short_count":          0,
+            "last_entry_bar_time":          None,
+            "last_entry_bar_tf":            None,
+            "our_client_order_ids":         [],
+            "manual_close_detected":        False,
+            "external_activity_detected":   False,
         })
     save_state()
     logger.info("🔄 Estado reseteado completamente")
@@ -151,14 +158,13 @@ def update_position(symbol: str, has_long: bool, has_short: bool):
         _state["position_long"]   = has_long
         _state["position_short"]  = has_short
         _state["position_symbol"] = symbol if (has_long or has_short) else None
-        # Al cerrar completamente, limpiar datos de entrada
         if not has_long:
-            _state["entry_price_long"] = None
-            _state["entry_qty_long"]   = None
-            _state["pyramid_long_count"] = 0
+            _state["entry_price_long"]    = None
+            _state["entry_qty_long"]      = None
+            _state["pyramid_long_count"]  = 0
         if not has_short:
-            _state["entry_price_short"] = None
-            _state["entry_qty_short"]   = None
+            _state["entry_price_short"]   = None
+            _state["entry_qty_short"]     = None
             _state["pyramid_short_count"] = 0
     save_state()
     logger.info(
@@ -177,7 +183,6 @@ def update_entry(side: str, price: float, qty: float):
             prev_qty   = _state.get("entry_qty_long")   or 0
             prev_price = _state.get("entry_price_long") or price
             new_qty    = prev_qty + qty
-            # Precio medio ponderado
             avg_price  = ((prev_price * prev_qty) + (price * qty)) / new_qty if new_qty else price
             _state["entry_qty_long"]   = new_qty
             _state["entry_price_long"] = round(avg_price, 8)
@@ -197,27 +202,50 @@ def increment_pyramid(side: str):
         if side == "LONG":
             _state["pyramid_long_count"] += 1
             count = _state["pyramid_long_count"]
-
         elif side == "SHORT":
             _state["pyramid_short_count"] += 1
             count = _state["pyramid_short_count"]
-
     save_state()
-
     logger.info(f"📈 Pirámide {side}: {count} entradas abiertas")
 
 def register_our_order(client_order_id: str):
-    """Guarda nuestros clientOrderID recientes. Máximo 20."""
+    """
+    Guarda nuestros clientOrderID recientes. Máximo 20.
+    Usado por reconciler para distinguir cierre nuestro vs cierre manual.
+    """
     if not client_order_id:
         return
-
     with _lock:
         ids = _state.get("our_client_order_ids", [])
-
         if client_order_id not in ids:
             ids.append(client_order_id)
-
         _state["our_client_order_ids"] = ids[-20:]
-
     save_state()
     logger.info(f"🧾 clientOrderID registrado: {client_order_id}")
+
+def get_our_order_ids() -> list:
+    """
+    Devuelve lista de clientOrderIDs que generó nuestro sistema.
+    Usado por reconciler para detectar si un cierre fue nuestro o manual.
+    """
+    with _lock:
+        return list(_state.get("our_client_order_ids", []))
+
+def set_flag(key: str, value: bool):
+    """
+    Escribe un flag booleano en state.
+    Usado por reconciler para marcar eventos detectados en el core.
+    Panel y Telegram solo leen estos flags — no los calculan.
+
+    Keys válidas actualmente:
+      - manual_close_detected
+      - external_activity_detected
+    """
+    _VALID_FLAGS = {"manual_close_detected", "external_activity_detected"}
+    if key not in _VALID_FLAGS:
+        logger.warning(f"⚠️ set_flag — key desconocida: {key} (ignorada)")
+        return
+    with _lock:
+        _state[key] = value
+    save_state()
+    logger.info(f"🚩 Flag [{key}] = {value}")
