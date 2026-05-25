@@ -115,7 +115,7 @@ def handle_signal(payload: dict) -> dict:
         return {"status": "ignored", "reason": "unknown_signal"}
 
     # ============================================================
-    # 📈 CONTROL PIRÁMIDE — TV es la fuente de verdad
+    # 📈 CONTROL PIRÁMIDE + 🔒 ANTI-DUPLICADOS
     # ============================================================
     if signal in ("ENTRY_LONG", "ENTRY_SHORT"):
         pyramid_current = int(payload.get("pyramid_current", 0))
@@ -131,6 +131,23 @@ def handle_signal(payload: dict) -> dict:
                 "reason":  "pyramid_full",
                 "current": pyramid_current,
                 "max":     pyramid_max
+            }
+
+        signal_time = payload.get("time", "")
+        signal_tf   = payload.get("tf", "")
+        state       = get_state()
+
+        if (signal_time and signal_time == state.get("last_entry_bar_time")
+                and signal_tf == state.get("last_entry_bar_tf")):
+            logger.warning(
+                f"⛔ {signal} rechazada — ya hubo entrada en esta vela "
+                f"[time={signal_time} tf={signal_tf}] [{robot}]"
+            )
+            return {
+                "status": "rejected",
+                "reason": "duplicate_entry_same_bar",
+                "time":   signal_time,
+                "tf":     signal_tf
             }
 
     # ============================================================
@@ -210,6 +227,10 @@ def _entry_long(symbol: str, price: str, robot: str, payload: dict) -> dict:
 
         update_entry("LONG", price_exec, qty)
         increment_pyramid("LONG")
+        update_state({
+            "last_entry_bar_time": payload.get("time", ""),
+            "last_entry_bar_tf":   payload.get("tf", ""),
+        })
 
         logger.info(f"✅ ENTRY_LONG ejecutado y state actualizado [{robot}]")
 
@@ -264,6 +285,10 @@ def _entry_short(symbol: str, price: str, robot: str, payload: dict) -> dict:
 
         update_entry("SHORT", price_exec, qty)
         increment_pyramid("SHORT")
+        update_state({
+            "last_entry_bar_time": payload.get("time", ""),
+            "last_entry_bar_tf":   payload.get("tf", ""),
+        })
         
         logger.info(f"✅ ENTRY_SHORT ejecutado y state actualizado [{robot}]")
 
