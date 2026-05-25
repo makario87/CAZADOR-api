@@ -41,19 +41,17 @@ VALID_SIGNALS = {
 # 💰 SIZING — qty calculada en Python
 # ============================================================
 
-def _calculate_qty(price_str: str, robot: str = "") -> float:
+def _calculate_qty(symbol: str, price_str: str, robot: str = "") -> float:
     """
     Calcula qty en contratos usando balance real de BingX.
 
     Fórmula:
-        margen    = balance_disponible × RISK_PCT
-        qty       = margen / precio_actual
+        margen = balance_disponible × RISK_PCT
+        qty    = margen / precio_actual
 
+    Redondeo: usa round_qty() de market_info — stepSize real por símbolo.
+    Validación min_qty: rechaza si qty < mínimo real del contrato.
     BingX aplica el leverage configurado manualmente en el broker.
-    Python solo decide cuánto margen arriesgar.
-
-    Devuelve qty como float redondeado a 0 decimales (contratos enteros).
-    En el futuro: step_size por símbolo para redondeo preciso.
     """
     try:
         price = float(price_str)
@@ -70,17 +68,27 @@ def _calculate_qty(price_str: str, robot: str = "") -> float:
         if available <= 0:
             raise ValueError(f"Balance disponible cero o negativo: {available}")
 
-        margen = available * RISK_PCT
-        qty    = margen / price
+        from brokers.market_info import round_qty, get_min_qty
+        from brokers.bingx import normalize_symbol
 
-        # Redondear a entero — suficiente para la mayoría de pares
-        # TODO futuro: step_size por símbolo desde BingX market info
-        qty_rounded = max(1, round(qty))
+        sym_normalized = normalize_symbol(symbol)
+        margen         = available * RISK_PCT
+        qty            = margen / price
+        qty_rounded    = round_qty(sym_normalized, qty)
+        min_qty        = get_min_qty(sym_normalized)
+
+        if min_qty > 0 and qty_rounded < min_qty:
+            logger.warning(
+                f"⚠️ [{robot}] qty={qty_rounded} < min_qty={min_qty} "
+                f"para {sym_normalized} — orden rechazada"
+            )
+            return 0.0
 
         logger.info(
-            f"💰 [{robot}] Sizing: balance={available:.2f} USDT "
-            f"× {RISK_PCT*100:.1f}% = {margen:.2f} USDT margen "
-            f"/ price={price} = {qty:.2f} → qty={qty_rounded}"
+            f"💰 [{robot}] Sizing {sym_normalized}: "
+            f"balance={available:.2f} USDT × {RISK_PCT*100:.3f}% "
+            f"= {margen:.4f} USDT / price={price} "
+            f"= {qty:.6f} → round={qty_rounded} (min={min_qty})"
         )
         return float(qty_rounded)
 
@@ -195,7 +203,7 @@ def handle_signal(payload: dict) -> dict:
 # ============================================================
 
 def _entry_long(symbol: str, price: str, robot: str, payload: dict) -> dict:
-    qty = _calculate_qty(price, robot)
+    qty = _calculate_qty(symbol, price, robot)
 
     if qty <= 0:
         return {"status": "error", "reason": "qty_calculation_failed"}
@@ -250,7 +258,7 @@ def _entry_long(symbol: str, price: str, robot: str, payload: dict) -> dict:
 
 
 def _entry_short(symbol: str, price: str, robot: str, payload: dict) -> dict:
-    qty = _calculate_qty(price, robot)
+    qty = _calculate_qty(symbol, price, robot)
 
     if qty <= 0:
         return {"status": "error", "reason": "qty_calculation_failed"}
@@ -375,7 +383,7 @@ def _giro_long(symbol, price, robot, payload):
 
     time.sleep(GIRO_BUFFER_SECONDS)
 
-    qty = _calculate_qty(price, robot)
+    qty = _calculate_qty(symbol, price, robot)
 
     if qty <= 0:
         return {"status": "error", "reason": "qty_calculation_failed"}
@@ -467,7 +475,7 @@ def _giro_short(symbol, price, robot, payload):
 
     time.sleep(GIRO_BUFFER_SECONDS)
 
-    qty = _calculate_qty(price, robot)
+    qty = _calculate_qty(symbol, price, robot)
 
     if qty <= 0:
         return {"status": "error", "reason": "qty_calculation_failed"}
