@@ -322,8 +322,13 @@ def _close_long(symbol: str, price: str, robot: str, payload: dict) -> dict:
         update_position(symbol, has_long=False, has_short=False)
         logger.info(f"✅ CLOSE_LONG ejecutado y state actualizado [{robot}]")
     else:
-        logger.error(f"❌ CLOSE_LONG FALLÓ en BingX — state NO actualizado. code={code} msg={result.get('msg')} [{robot}]")
-        trigger_emergency(f"CLOSE_LONG no ejecutó cierre en BingX: code={code} msg={result.get('msg')}")
+        if result.get("msg") == "no_open_position":
+            logger.info(f"ℹ️ CLOSE_LONG — no había LONG en BingX, actualizando state [{robot}]")
+            update_state({"last_signal": "CLOSE_LONG", "symbol": symbol})
+            update_position(symbol, has_long=False, has_short=False)
+        else:
+            logger.error(f"❌ CLOSE_LONG FALLÓ en BingX — state NO actualizado. code={code} msg={result.get('msg')} [{robot}]")
+            trigger_emergency(f"CLOSE_LONG no ejecutó cierre en BingX: code={code} msg={result.get('msg')}")
 
     return {"status": "ok" if code == 0 else "error", "action": "CLOSE_LONG", "result": result}
 
@@ -339,8 +344,13 @@ def _close_short(symbol: str, price: str, robot: str, payload: dict) -> dict:
         update_position(symbol, has_long=False, has_short=False)
         logger.info(f"✅ CLOSE_SHORT ejecutado y state actualizado [{robot}]")
     else:
-        logger.error(f"❌ CLOSE_SHORT FALLÓ en BingX — state NO actualizado. code={code} msg={result.get('msg')} [{robot}]")
-        trigger_emergency(f"CLOSE_SHORT no ejecutó cierre en BingX: code={code} msg={result.get('msg')}")
+        if result.get("msg") == "no_open_position":
+            logger.info(f"ℹ️ CLOSE_SHORT — no había SHORT en BingX, actualizando state [{robot}]")
+            update_state({"last_signal": "CLOSE_SHORT", "symbol": symbol})
+            update_position(symbol, has_long=False, has_short=False)
+        else:
+            logger.error(f"❌ CLOSE_SHORT FALLÓ en BingX — state NO actualizado. code={code} msg={result.get('msg')} [{robot}]")
+            trigger_emergency(f"CLOSE_SHORT no ejecutó cierre en BingX: code={code} msg={result.get('msg')}")
 
     return {"status": "ok" if code == 0 else "error", "action": "CLOSE_SHORT", "result": result}
 
@@ -357,33 +367,13 @@ def _giro_long(symbol, price, robot, payload):
     code_close = result_close.get("code", -1)
 
     if code_close != 0:
-        logger.error(
-            f"❌ GIRO_LONG cierre SHORT falló — abortando. "
-            f"code={code_close} [{robot}]"
-        )
-
-        trigger_emergency(
-            f"GIRO_LONG no cerró SHORT: "
-            f"code={code_close} "
-            f"msg={result_close.get('msg')}"
-        )
-
-        log_trade(
-            signal="GIRO_LONG_CLOSE",
-            symbol=symbol,
-            qty=0,
-            price=price,
-            result=result_close,
-            robot=robot,
-            demo=SIMULATION_MODE
-        )
-
-        return {
-            "status": "error",
-            "action": "GIRO_LONG",
-            "reason": "close_failed",
-            "close": result_close
-        }
+        if result_close.get("msg") == "no_open_position":
+            logger.info(f"ℹ️ GIRO_LONG — no había SHORT en BingX, abriendo LONG directamente [{robot}]")
+        else:
+            logger.error(f"❌ GIRO_LONG cierre SHORT falló — abortando. code={code_close} [{robot}]")
+            trigger_emergency(f"GIRO_LONG no cerró SHORT: code={code_close} msg={result_close.get('msg')}")
+            log_trade(signal="GIRO_LONG_CLOSE", symbol=symbol, qty=0, price=price, result=result_close, robot=robot, demo=SIMULATION_MODE)
+            return {"status": "error", "action": "GIRO_LONG", "reason": "close_failed", "close": result_close}
 
     time.sleep(GIRO_BUFFER_SECONDS)
 
@@ -469,33 +459,13 @@ def _giro_short(symbol, price, robot, payload):
     code_close = result_close.get("code", -1)
 
     if code_close != 0:
-        logger.error(
-            f"❌ GIRO_SHORT cierre LONG falló — abortando. "
-            f"code={code_close} [{robot}]"
-        )
-
-        trigger_emergency(
-            f"GIRO_SHORT no cerró LONG: "
-            f"code={code_close} "
-            f"msg={result_close.get('msg')}"
-        )
-
-        log_trade(
-            signal="GIRO_SHORT_CLOSE",
-            symbol=symbol,
-            qty=0,
-            price=price,
-            result=result_close,
-            robot=robot,
-            demo=SIMULATION_MODE
-        )
-
-        return {
-            "status": "error",
-            "action": "GIRO_SHORT",
-            "reason": "close_failed",
-            "close": result_close
-        }
+        if result_close.get("msg") == "no_open_position":
+            logger.info(f"ℹ️ GIRO_SHORT — no había LONG en BingX, abriendo SHORT directamente [{robot}]")
+        else:
+            logger.error(f"❌ GIRO_SHORT cierre LONG falló — abortando. code={code_close} [{robot}]")
+            trigger_emergency(f"GIRO_SHORT no cerró LONG: code={code_close} msg={result_close.get('msg')}")
+            log_trade(signal="GIRO_SHORT_CLOSE", symbol=symbol, qty=0, price=price, result=result_close, robot=robot, demo=SIMULATION_MODE)
+            return {"status": "error", "action": "GIRO_SHORT", "reason": "close_failed", "close": result_close}
 
     time.sleep(GIRO_BUFFER_SECONDS)
 
@@ -591,8 +561,13 @@ def _sl_long(symbol: str, signal: str, price: str, robot: str, payload: dict) ->
         update_position(symbol, has_long=False, has_short=False)
         logger.info(f"✅ {signal} ejecutado y state actualizado [{robot}]")
     else:
-        logger.error(f"❌ {signal} FALLÓ en BingX — state NO actualizado. code={code} msg={result.get('msg')} [{robot}]")
-        trigger_emergency(f"{signal} no ejecutó cierre en BingX: code={code} msg={result.get('msg')}")
+        if result.get("msg") == "no_open_position":
+            logger.info(f"ℹ️ {signal} — no había LONG en BingX, actualizando state [{robot}]")
+            update_state({"last_signal": signal, "symbol": symbol})
+            update_position(symbol, has_long=False, has_short=False)
+        else:
+            logger.error(f"❌ {signal} FALLÓ en BingX — state NO actualizado. code={code} msg={result.get('msg')} [{robot}]")
+            trigger_emergency(f"{signal} no ejecutó cierre en BingX: code={code} msg={result.get('msg')}")
     
     return {"status": "ok" if code == 0 else "error", "action": signal, "result": result}
 
@@ -610,7 +585,12 @@ def _sl_short(symbol: str, signal: str, price: str, robot: str, payload: dict) -
         update_position(symbol, has_long=False, has_short=False)
         logger.info(f"✅ {signal} ejecutado y state actualizado [{robot}]")
     else:
-        logger.error(f"❌ {signal} FALLÓ en BingX — state NO actualizado. code={code} msg={result.get('msg')} [{robot}]")
-        trigger_emergency(f"{signal} no ejecutó cierre en BingX: code={code} msg={result.get('msg')}")
+        if result.get("msg") == "no_open_position":
+            logger.info(f"ℹ️ {signal} — no había SHORT en BingX, actualizando state [{robot}]")
+            update_state({"last_signal": signal, "symbol": symbol})
+            update_position(symbol, has_long=False, has_short=False)
+        else:
+            logger.error(f"❌ {signal} FALLÓ en BingX — state NO actualizado. code={code} msg={result.get('msg')} [{robot}]")
+            trigger_emergency(f"{signal} no ejecutó cierre en BingX: code={code} msg={result.get('msg')}")
     
     return {"status": "ok" if code == 0 else "error", "action": signal, "result": result}
