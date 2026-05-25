@@ -61,24 +61,54 @@ def health():
 
     worker_alive = _worker is not None and _worker.is_alive()
 
+    # #6 — ping BingX real con latencia
+    import time as _time
+    from brokers.bingx import ping_bingx
+
+    t0 = _time.monotonic()
+
+    bingx_ok = ping_bingx()
+
+    bingx_latency_ms = round(
+        (_time.monotonic() - t0) * 1000
+    )
+
     return jsonify({
-        "status":               "🟢 online",
-        "time_now":             format_log_time(),
-        "demo_mode":            DEMO_MODE,
-        "emergency":            state.get("emergency"),
-        "blocked":              state.get("blocked"),
-        "queue_size":           queue_size(),
-        "worker_alive":         worker_alive,
-        "reconciler_alive":     reconciler_alive(),
-        "last_webhook_time":    state.get("last_webhook_time"),
-        "last_webhook_signal":  state.get("last_webhook_signal"),
-        "last_reconciler_time": state.get("last_reconciler_time"),
-        "webhooks_received":    state.get("webhooks_received"),
-        "webhooks_ok":          state.get("webhooks_ok"),
-        "webhooks_failed":      state.get("webhooks_failed"),
-        "started_at":           state.get("started_at"),
-        "last_signal":          state.get("last_signal"),
-        "symbol":               state.get("symbol"),
+        "status":                       "🟢 online",
+        "time_now":                     format_log_time(),
+        "demo_mode":                    DEMO_MODE,
+        "emergency":                    state.get("emergency"),
+        "blocked":                      state.get("blocked"),
+        "queue_size":                   queue_size(),
+        "worker_alive":                 worker_alive,
+        "reconciler_alive":             reconciler_alive(),
+
+        # WATCHDOG
+        "watchdog_alive":               is_watchdog_alive(),
+        "watchdog_consecutive_fails":   get_consecutive_fails(),
+
+        # BINGX
+        "bingx_reachable":              bingx_ok,
+        "bingx_latency_ms":             bingx_latency_ms,
+
+        # WEBHOOKS
+        "last_webhook_time":            state.get("last_webhook_time"),
+        "last_webhook_signal":          state.get("last_webhook_signal"),
+        "last_reconciler_time":         state.get("last_reconciler_time"),
+
+        # ESTADÍSTICAS
+        "webhooks_received":            state.get("webhooks_received"),
+        "webhooks_ok":                  state.get("webhooks_ok"),
+        "webhooks_failed":              state.get("webhooks_failed"),
+
+        # ESTADO GENERAL
+        "started_at":                   state.get("started_at"),
+        "last_signal":                  state.get("last_signal"),
+        "symbol":                       state.get("symbol"),
+
+        # FLAGS
+        "manual_close_detected":        state.get("manual_close_detected"),
+        "external_activity_detected":   state.get("external_activity_detected"),
     })
     
 @app.route("/ping", methods=["GET"])
