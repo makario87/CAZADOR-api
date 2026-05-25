@@ -5,6 +5,7 @@ Firma HMAC SHA256 validada contra VST Demo.
 """
 import hmac
 import hashlib
+import time
 import uuid
 import requests
 from config.settings import BINGX_API_KEY, BINGX_API_SECRET, BINGX_BASE_URL, SIMULATION_MODE, BINGX_ENV, ORDER_TIMEOUT
@@ -91,17 +92,94 @@ def _get(path: str, params: dict) -> dict:
         logger.error(f"❌ GET {path} error: {e}")
         return {}
 
+
+# ============================================================
+# 🔁 RETRY — códigos de error temporales de BingX
+# ============================================================
+# Estos errores son transitorios: BingX estaba saturado o hubo
+# un corte de red puntual. Merece reintentar, no emergencia.
+# Cualquier otro código de error es permanente → salida inmediata.
+
+_RETRYABLE_CODES = {101500}   # "system busy"
+_RETRY_ATTEMPTS  = 3
+_RETRY_DELAY     = 0.5        # segundos entre intentos
+
+
 def _post(path: str, params: dict) -> dict:
-    try:
-        qs = _build_query(params)
-        sig = _sign(qs)
-        url = f"{BINGX_BASE_URL}{path}?{qs}&signature={sig}"
-        logger.info(f"📤 POST {path} | params={params} | qs={qs[:120]}...")
-        response = requests.post(url, headers=_headers(), data={}, timeout=ORDER_TIMEOUT)
-        return response.json()
-    except Exception as e:
-        logger.error(f"❌ POST {path} error: {e}")
-        return {}
+    """
+    POST a BingX con retry automático para errores temporales.
+
+    Flujo:
+      - Intenta hasta _RETRY_ATTEMPTS veces.
+      - Si code == 0                → éxito, return data inmediato.
+      - Si code en _RETRYABLE_CODES → espera _RETRY_DELAY y reintenta.
+      - Si code es otro error        → error permanente, return inmediato.
+      - Si excepción de red          → cuenta como intento, reintenta.
+      - Si agota todos los intentos  → return último data (o {}).
+    """
+    last_data = {}
+
+    for attempt in range(1, _RETRY_ATTEMPTS + 1):
+        try:
+            qs  = _build_query(params)
+            sig = _sign(qs)
+            url = f"{BINGX_BASE_URL}{path}?{qs}&signature={sig}"
+
+            if attempt == 1:
+                logger.info(f"📤 POST {path} | params={params} | qs={qs[:120]}...")
+            else:
+                logger.warning(f"🔁 POST {path} — reintento {attempt}/{_RETRY_ATTEMPTS}")
+
+            response = requests.post(url, headers=_headers(), data={}, timeout=ORDER_TIMEOUT)
+            data     = response.json()
+            code     = data.get("code")
+            last_data = data
+
+            if code == 0:
+                # Éxito
+                return data
+
+            if code in _RETRYABLE_CODES:
+                # Error temporal → reintenta si quedan intentos
+                logger.warning(
+                    f"⚠️ POST {path} — error temporal code={code} msg={data.get('msg')} "
+                    f"(intento {attempt}/{_RETRY_ATTEMPTS})"
+                )
+                if attempt < _RETRY_ATTEMPTS:
+                    time.sleep(_RETRY_DELAY)
+                continue
+
+            # Error permanente → salir inmediatamente sin más intentos
+            logger.error(
+                f"❌ POST {path} — error permanente code={code} msg={data.get('msg')} "
+                f"(intento {attempt}/{_RETRY_ATTEMPTS})"
+            )
+            return data
+
+        except requests.exceptions.Timeout:
+            logger.warning(
+                f"⚠️ POST {path} — timeout (intento {attempt}/{_RETRY_ATTEMPTS})"
+            )
+            if attempt < _RETRY_ATTEMPTS:
+                time.sleep(_RETRY_DELAY)
+
+        except requests.exceptions.ConnectionError:
+            logger.warning(
+                f"⚠️ POST {path} — connection error (intento {attempt}/{_RETRY_ATTEMPTS})"
+            )
+            if attempt < _RETRY_ATTEMPTS:
+                time.sleep(_RETRY_DELAY)
+
+        except Exception as e:
+            logger.error(f"❌ POST {path} — excepción inesperada: {e}")
+            return last_data
+
+    # Agotados todos los intentos sin éxito
+    logger.error(
+        f"❌ POST {path} — agotados {_RETRY_ATTEMPTS} intentos. "
+        f"Último code={last_data.get('code')} msg={last_data.get('msg')}"
+    )
+    return last_data
 
 
 # ============================================================
