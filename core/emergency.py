@@ -113,3 +113,9 @@ def _check_bingx_connection():
             )
 
         _consecutive_fails = 0
+
+def is_watchdog_alive() -> bool:
+    return _watchdog_thread is not None and _watchdog_thread.is_alive()
+
+def get_consecutive_fails() -> int:
+    return _consecutive_fails
