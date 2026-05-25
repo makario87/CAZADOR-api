@@ -12,7 +12,7 @@ import time
 
 from brokers.bingx import get_positions, get_balance, get_order_history
 from core.emergency import trigger_emergency
-from data.state import get_state, update_position, record_reconciler, get_our_order_ids
+from data.state import get_state, update_position, record_reconciler, get_our_order_ids, get_all_positions
 from config.settings import RECONCILE_INTERVAL, SIMULATION_MODE
 from logs.logger import get_logger
 
@@ -74,55 +74,75 @@ def _check_state():
 
     positions = bingx_data.get("data") or []
 
-    bingx_long = any(
-        p.get("positionSide") == "LONG" and float(p.get("positionAmt", 0)) != 0
-        for p in positions
-    )
-    bingx_short = any(
-        p.get("positionSide") == "SHORT" and float(p.get("positionAmt", 0)) != 0
-        for p in positions
-    )
+    # — Construir mapa BingX: symbol → {long, short} —
+    bingx_map = {}
+    for p in positions:
+        amt  = float(p.get("positionAmt", 0))
+        if amt == 0:
+            continue
+        sym  = p.get("symbol", "")
+        side = p.get("positionSide", "")
+        if sym not in bingx_map:
+            bingx_map[sym] = {"long": False, "short": False}
+        if side == "LONG":
+            bingx_map[sym]["long"]  = True
+        elif side == "SHORT":
+            bingx_map[sym]["short"] = True
 
-    state        = get_state()
-    python_long  = state.get("position_long",  False)
-    python_short = state.get("position_short", False)
-    symbol       = state.get("position_symbol", "?")
+    # — Construir mapa Python: symbol → {long, short} —
+    # Usa get_all_positions() — solo símbolos con posición abierta
+    from brokers.bingx import normalize_symbol
+    python_positions = get_all_positions()
+    python_map = {
+        normalize_symbol(sym): {"long": pos.get("long", False), "short": pos.get("short", False), "raw_symbol": sym}
+        for sym, pos in python_positions.items()
+    }
 
-    logger.info(
-        f"🔍 Reconciliación: "
-        f"Python(L={python_long} S={python_short}) vs "
-        f"BingX(L={bingx_long} S={bingx_short})"
-    )
+    # — Símbolos a verificar: unión de ambos mapas —
+    all_symbols = set(bingx_map.keys()) | set(python_map.keys())
 
-    # ── SINCRONIZADO ─────────────────────────────────────────
-    if python_long == bingx_long and python_short == bingx_short:
-        logger.info("✅ Estado sincronizado correctamente")
-        _check_orphans(positions, symbol)
+    if not all_symbols:
+        logger.info("✅ Sin posiciones abiertas — estado sincronizado")
+        _check_orphans(positions, python_map)
         return
 
-    # ── DESYNC: BingX tiene algo que Python no sabe ──────────
-    # → Posición huérfana (abierta externamente)
-    if bingx_long and not python_long:
-        logger.warning("⚠️ DESYNC: BingX tiene LONG pero Python no lo sabe → posición huérfana")
-        _handle_orphan("LONG", symbol)
-        return
+    for sym in all_symbols:
+        bingx_long  = bingx_map.get(sym, {}).get("long",  False)
+        bingx_short = bingx_map.get(sym, {}).get("short", False)
+        python_long  = python_map.get(sym, {}).get("long",  False)
+        python_short = python_map.get(sym, {}).get("short", False)
+        raw_symbol   = python_map.get(sym, {}).get("raw_symbol", sym)
 
-    if bingx_short and not python_short:
-        logger.warning("⚠️ DESYNC: BingX tiene SHORT pero Python no lo sabe → posición huérfana")
-        _handle_orphan("SHORT", symbol)
-        return
+        logger.info(
+            f"🔍 [{sym}] Python(L={python_long} S={python_short}) vs "
+            f"BingX(L={bingx_long} S={bingx_short})"
+        )
 
-    # ── DESYNC CRÍTICO: Python cree que hay posición pero BingX no tiene nada ──
-    # → Puede ser cierre manual o error real
-    if python_long and not bingx_long:
-        logger.error("🚨 DESYNC CRÍTICO: Python cree LONG pero BingX no tiene nada")
-        _handle_missing_position("LONG", symbol)
-        return
+        if python_long == bingx_long and python_short == bingx_short:
+            logger.info(f"✅ [{sym}] Sincronizado")
+            continue
 
-    if python_short and not bingx_short:
-        logger.error("🚨 DESYNC CRÍTICO: Python cree SHORT pero BingX no tiene nada")
-        _handle_missing_position("SHORT", symbol)
-        return
+        if bingx_long and not python_long:
+            logger.warning(f"⚠️ [{sym}] DESYNC: BingX tiene LONG pero Python no → huérfana")
+            _handle_orphan("LONG", raw_symbol)
+            continue
+
+        if bingx_short and not python_short:
+            logger.warning(f"⚠️ [{sym}] DESYNC: BingX tiene SHORT pero Python no → huérfana")
+            _handle_orphan("SHORT", raw_symbol)
+            continue
+
+        if python_long and not bingx_long:
+            logger.error(f"🚨 [{sym}] DESYNC CRÍTICO: Python cree LONG pero BingX no tiene nada")
+            _handle_missing_position("LONG", raw_symbol)
+            continue
+
+        if python_short and not bingx_short:
+            logger.error(f"🚨 [{sym}] DESYNC CRÍTICO: Python cree SHORT pero BingX no tiene nada")
+            _handle_missing_position("SHORT", raw_symbol)
+            continue
+
+    _check_orphans(positions, python_map)
 
 
 # ============================================================
@@ -229,18 +249,13 @@ def _handle_orphan(side: str, symbol: str):
     )
 
 
-def _check_orphans(positions: list, our_symbol: str):
+def _check_orphans(positions: list, python_map: dict):
     """
-    Cuando estado está sincronizado, verificar si hay posiciones
-    en BingX para símbolos que Python no gestiona en absoluto.
-    Solo loguea — no actúa.
+    Verifica si hay posiciones en BingX para símbolos que Python
+    no gestiona en absoluto. Solo loguea — no actúa.
+    python_map: {bingx_symbol: {long, short, raw_symbol}}
     """
-    state = get_state()
     from brokers.bingx import normalize_symbol
-
-    our_symbol_bingx = normalize_symbol(
-        state.get("position_symbol") or ""
-    )
 
     for p in positions:
         amt = float(p.get("positionAmt", 0))
@@ -249,8 +264,8 @@ def _check_orphans(positions: list, our_symbol: str):
         bingx_symbol = p.get("symbol", "")
         bingx_side   = p.get("positionSide", "")
 
-        # Si es nuestro símbolo activo, ya lo gestiona _check_state → ignorar
-        if bingx_symbol == our_symbol_bingx:
+        # Si Python gestiona este símbolo → ya lo verifica _check_state
+        if bingx_symbol in python_map:
             continue
 
         logger.warning(
