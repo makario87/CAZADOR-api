@@ -236,7 +236,11 @@ def _check_orphans(positions: list, our_symbol: str):
     Solo loguea — no actúa.
     """
     state = get_state()
-    our_symbol_normalized = state.get("position_symbol", "")
+    from brokers.bingx import normalize_symbol
+
+    our_symbol_bingx = normalize_symbol(
+        state.get("position_symbol") or ""
+    )
 
     for p in positions:
         amt = float(p.get("positionAmt", 0))
@@ -246,7 +250,7 @@ def _check_orphans(positions: list, our_symbol: str):
         bingx_side   = p.get("positionSide", "")
 
         # Si es nuestro símbolo activo, ya lo gestiona _check_state → ignorar
-        if bingx_symbol == our_symbol_normalized:
+        if bingx_symbol == our_symbol_bingx:
             continue
 
         logger.warning(
