@@ -107,7 +107,7 @@ def health():
         "symbol":                       state.get("symbol"),
 
         # FLAGS
-        "manual_close_detected":        state.get("manual_close_detected"),
+        "external_close_detected":      state.get("external_close_detected"),
         "external_activity_detected":   state.get("external_activity_detected"),
     })
     
