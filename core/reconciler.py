@@ -220,7 +220,7 @@ def _handle_missing_position(side: str, symbol: str):
             f"clientId={their_client_id} NO está en our_client_order_ids"
         )
         update_position(symbol, has_long=False, has_short=False)
-        _set_manual_close_flag(symbol, side, their_client_id)
+        _set_external_close_flag(symbol, side, their_client_id)
         # Robot sigue activo — se autorregula con siguiente señal TV
         logger.info(
             f"✅ State limpiado — robot sigue activo — "
@@ -275,22 +275,22 @@ def _check_orphans(positions: list, python_map: dict):
 
 
 # ============================================================
-# 🚩 FLAGS — state.py (manual_close_detected / external_activity_detected)
+# 🚩 FLAGS — state.py (external_close_detected / external_activity_detected)
 # ============================================================
-def _set_manual_close_flag(symbol: str, side: str, client_order_id: str):
+def _set_external_close_flag(symbol: str, side: str, client_order_id: str):
     """
-    Marca manual_close_detected en state para que panel y Telegram lo lean.
+    Marca external_close_detected en state para que panel y Telegram lo lean.
     La lógica de detección vive aquí en el core — panel solo visualiza.
     """
     try:
         from data.state import set_flag
-        set_flag("manual_close_detected", True)
+        set_flag("external_close_detected", True)
         logger.info(
-            f"🚩 Flag manual_close_detected=True — {side} {symbol} "
+            f"🚩 Flag external_close_detected=True — {side} {symbol} "
             f"clientId={client_order_id}"
         )
     except Exception as e:
-        logger.error(f"❌ No se pudo marcar manual_close_detected: {e}")
+        logger.error(f"❌ No se pudo marcar external_close_detected: {e}")
 
 
 def _set_external_activity_flag(symbol: str, side: str):
