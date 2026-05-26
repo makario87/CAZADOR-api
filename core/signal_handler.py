@@ -109,94 +109,57 @@ def _send_sl_broker(
     symbol: str,
     position_side: str,
     qty: float,
-    sl_promedio_str: str,
-    sl_last_str: str,
+    sl_broker_str: str,
     robot: str
 ) -> None:
     """
-    Calcula y coloca STOP_MARKET en BingX como red de seguridad.
+    Coloca STOP_MARKET en BingX como red de seguridad.
 
-    IMPORTANTE:
-    - SOLO se ejecuta tras entrada confirmada OK.
-    - NO activa emergencia si falla.
-    - TradingView sigue siendo la fuente de verdad.
+    TV decide y calcula el precio real (sl_broker).
+    Python solo añade margen de emergencia del 1% y coloca la orden.
     """
-
     try:
+        sl_broker_raw = float(sl_broker_str or 0)
 
-        sl_promedio = float(sl_promedio_str or 0)
-        sl_last     = float(sl_last_str or 0)
-
-        # Ningún SL disponible
-        if sl_promedio <= 0 and sl_last <= 0:
-
+        if sl_broker_raw <= 0:
             logger.info(
                 f"ℹ️ [{robot}] SL broker omitido — "
-                f"sl_promedio=0 y sl_last=0"
+                f"sl_broker=0"
             )
-
             return
 
-        # Solo candidatos válidos
-        candidates = [v for v in [sl_promedio, sl_last] if v > 0]
-
-        if not candidates:
-
-            logger.info(
-                f"ℹ️ [{robot}] SL broker omitido — sin candidatos válidos"
-            )
-
-            return
-
-        # LONG → coger el más cercano por abajo
         if position_side == "LONG":
-
-            sl_raw = min(candidates)
-
-            # pequeño margen para evitar trigger prematuro
-            sl_broker = round(sl_raw * 0.99, 8)
-
+            sl_final = round(sl_broker_raw * 0.99, 8)
             close_side = "SELL"
-
-        # SHORT → coger el más cercano por arriba
         else:
-
-            sl_raw = max(candidates)
-
-            sl_broker = round(sl_raw * 1.01, 8)
-
+            sl_final = round(sl_broker_raw * 1.01, 8)
             close_side = "BUY"
 
         logger.info(
             f"🛡️ [{robot}] SL broker {position_side} {symbol} — "
-            f"sl_promedio={sl_promedio} "
-            f"sl_last={sl_last} "
-            f"→ sl_raw={sl_raw} "
-            f"→ sl_broker={sl_broker}"
+            f"sl_broker_tv={sl_broker_raw} → sl_final={sl_final}"
         )
 
         result = place_stop_order(
             symbol=symbol,
             side=close_side,
             position_side=position_side,
-            stop_price=sl_broker,
+            stop_price=sl_final,
             quantity=qty,
             robot=robot
         )
 
         if result.get("code") != 0:
-
             logger.warning(
                 f"⚠️ [{robot}] SL broker no colocado — "
-                f"code={result.get('code')} "
-                f"msg={result.get('msg')} "
-                f"— TV seguirá gestionando SL"
+                f"code={result.get('code')} msg={result.get('msg')} "
+                f"— TV seguirá gestionando SL normalmente"
             )
 
     except Exception as e:
-
         logger.error(
-            f"❌ [{robot}] Excepción en _send_sl_broker: {e}"
+            f"❌ [{robot}] Excepción en _send_sl_broker: {e} "
+            f"— continuando sin SL broker"
         )
         
 # ============================================================
@@ -347,8 +310,7 @@ def _entry_long(symbol: str, price: str, robot: str, payload: dict) -> dict:
             symbol,
             "LONG",
             qty,
-            payload.get("sl_promedio", "0"),
-            payload.get("sl_last", "0"),
+            payload.get("sl_broker", "0"),
             robot
         )
 
@@ -411,8 +373,7 @@ def _entry_short(symbol: str, price: str, robot: str, payload: dict) -> dict:
             symbol,
             "SHORT",
             qty,
-            payload.get("sl_promedio", "0"),
-            payload.get("sl_last", "0"),
+            payload.get("sl_broker", "0"),
             robot
         )
         
@@ -561,8 +522,7 @@ def _giro_long(symbol, price, robot, payload):
             symbol,
             "LONG",
             qty,
-            payload.get("sl_promedio", "0"),
-            payload.get("sl_last", "0"),
+            payload.get("sl_broker", "0"),
             robot
         )
 
@@ -664,8 +624,7 @@ def _giro_short(symbol, price, robot, payload):
             symbol,
             "SHORT",
             qty,
-            payload.get("sl_promedio", "0"),
-            payload.get("sl_last", "0"),
+            payload.get("sl_broker", "0"),
             robot
         )
 
