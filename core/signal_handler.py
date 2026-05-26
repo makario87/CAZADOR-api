@@ -434,6 +434,8 @@ def _giro_long(symbol, price, robot, payload):
         )
 
         update_entry(symbol, "LONG", price_exec, qty)
+        increment_pyramid(symbol, "LONG")
+        update_bar_time(symbol, payload.get("time", ""), payload.get("tf", ""))
 
         logger.info(f"✅ GIRO_LONG completo [{robot}]")
 
@@ -526,6 +528,8 @@ def _giro_short(symbol, price, robot, payload):
         )
 
         update_entry(symbol, "SHORT", price_exec, qty)
+        increment_pyramid(symbol, "SHORT")
+        update_bar_time(symbol, payload.get("time", ""), payload.get("tf", ""))
 
         logger.info(f"✅ GIRO_SHORT completo [{robot}]")
 
