@@ -364,6 +364,79 @@ def place_order(
 
     return data
 
+# ============================================================
+# 🛡️ SL BROKER — STOP_MARKET RED DE SEGURIDAD
+# ============================================================
+
+def place_stop_order(
+    symbol: str,
+    side: str,           # BUY para cerrar SHORT | SELL para cerrar LONG
+    position_side: str,  # LONG | SHORT
+    stop_price: float,
+    quantity: float,
+    robot: str = ""
+) -> dict:
+    """
+    Coloca una orden STOP_MARKET como red de seguridad (SL broker).
+
+    IMPORTANTE:
+    - SOLO se llama después de confirmar entrada OK.
+    - NO activa emergencia si falla.
+    - TV sigue siendo la fuente de verdad.
+    """
+
+    if SIMULATION_MODE:
+        logger.info(
+            f"🧪 SIMULATION — [{robot}] STOP_MARKET "
+            f"{side} {symbol} stop={stop_price} qty={quantity}"
+        )
+        return {
+            "simulation": True,
+            "code": 0
+        }
+
+    symbol = normalize_symbol(symbol)
+
+    quantity = round_qty(symbol, quantity)
+    qty_str  = format_qty(symbol, quantity)
+
+    client_order_id = str(uuid.uuid4())
+
+    params = {
+        "clientOrderID": client_order_id,
+        "positionSide":  position_side,
+        "quantity":      qty_str,
+        "side":          side,
+        "symbol":        symbol,
+        "type":          "STOP_MARKET",
+        "stopPrice":     str(round(stop_price, 8)),
+    }
+
+    data = _post("/openApi/swap/v2/trade/order", params)
+
+    code = data.get("code")
+
+    if code == 0:
+
+        logger.info(
+            f"✅ [{BINGX_ENV.upper()}][{robot}] SL BROKER OK — "
+            f"{side} {position_side} {symbol} "
+            f"stop={stop_price} qty={quantity} "
+            f"clientId={client_order_id}"
+        )
+
+    else:
+
+        logger.error(
+            f"❌ [{BINGX_ENV.upper()}][{robot}] SL BROKER FAILED — "
+            f"{side} {position_side} {symbol} "
+            f"stop={stop_price} "
+            f"code={code} msg={data.get('msg')} "
+            f"clientId={client_order_id}"
+        )
+
+    return data
+
 
 def close_position(
     symbol: str,
