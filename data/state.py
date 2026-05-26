@@ -78,6 +78,8 @@ def _default_position() -> dict:
         "pyramid_short_count": 0,
         "last_entry_bar_time": None,
         "last_entry_bar_tf":   None,
+        "sl_broker_order_id_long":   None,
+        "sl_broker_order_id_short":  None,
     }
 
 def _get_pos(symbol: str) -> dict:
@@ -222,18 +224,22 @@ def update_position(symbol: str, has_long: bool, has_short: bool):
         pos["short"] = has_short
 
         if not has_long:
-            pos["entry_price_long"]    = None
-            pos["entry_qty_long"]      = None
-            pos["pyramid_long_count"]  = 0
+            pos["entry_price_long"]          = None
+            pos["entry_qty_long"]            = None
+            pos["pyramid_long_count"]        = 0
+            pos["sl_broker_order_id_long"]   = None
+           
         if not has_short:
-            pos["entry_price_short"]   = None
-            pos["entry_qty_short"]     = None
-            pos["pyramid_short_count"] = 0
-
+            pos["entry_price_short"]         = None
+            pos["entry_qty_short"]           = None
+            pos["pyramid_short_count"]       = 0
+            pos["sl_broker_order_id_short"]  = None
+           
         # — sync legacy —
         _state["position_long"]   = has_long
         _state["position_short"]  = has_short
         _state["position_symbol"] = symbol if (has_long or has_short) else None
+       
         if not has_long:
             _state["entry_price_long"]   = None
             _state["entry_qty_long"]     = None
@@ -377,3 +383,29 @@ def set_flag(key: str, value: bool):
         _state[key] = value
     save_state()
     logger.info(f"🚩 Flag [{key}] = {value}")
+
+# ============================================================
+# 🛡️ SL BROKER ORDER IDS — #11
+# ============================================================
+
+def set_sl_broker_order_id(symbol: str, side: str, order_id: str | None):
+    """
+    Guarda o borra el orderId del STOP_MARKET activo para símbolo+lado.
+    side: 'LONG' | 'SHORT'
+    """
+    with _lock:
+        pos = _get_pos(symbol)
+        key = f"sl_broker_order_id_{side.lower()}"
+        pos[key] = order_id
+
+    save_state()
+    logger.info(f"🛡️ SL broker order_id [{symbol}][{side}] = {order_id}")
+
+
+def get_sl_broker_order_id(symbol: str, side: str) -> str | None:
+    """
+    Devuelve el orderId del STOP_MARKET activo para símbolo+lado.
+    """
+    with _lock:
+        pos = _get_pos(symbol)
+        return pos.get(f"sl_broker_order_id_{side.lower()}")
