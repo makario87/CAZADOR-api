@@ -216,7 +216,7 @@ def _handle_missing_position(side: str, symbol: str):
     else:
         # ClientOrderID no es nuestro → cierre externo (manual u otro sistema)
         logger.warning(
-            f"🖐️ CIERRE MANUAL DETECTADO — {side} {symbol} "
+            f"🖐️ CIERRE EXTERNO DETECTADO — {side} {symbol} "
             f"clientId={their_client_id} NO está en our_client_order_ids"
         )
         update_position(symbol, has_long=False, has_short=False)
