@@ -4,7 +4,12 @@ Interpreta las señales de CAZADOR y las ejecuta en el broker.
 TradingView manda solo la señal. Python calcula la qty.
 """
 import time
-from brokers.bingx import place_order, close_all_positions, get_balance
+from brokers.bingx import (
+    place_order,
+    place_stop_order,
+    close_all_positions,
+    get_balance
+)
 from data.state import (
     get_state,
     update_state,
@@ -96,7 +101,104 @@ def _calculate_qty(symbol: str, price_str: str, robot: str = "") -> float:
         logger.error(f"❌ [{robot}] Error calculando qty: {e}")
         return 0.0
 
+# ============================================================
+# 🛡️ SL BROKER — red de seguridad BingX
+# ============================================================
 
+def _send_sl_broker(
+    symbol: str,
+    position_side: str,
+    qty: float,
+    sl_promedio_str: str,
+    sl_last_str: str,
+    robot: str
+) -> None:
+    """
+    Calcula y coloca STOP_MARKET en BingX como red de seguridad.
+
+    IMPORTANTE:
+    - SOLO se ejecuta tras entrada confirmada OK.
+    - NO activa emergencia si falla.
+    - TradingView sigue siendo la fuente de verdad.
+    """
+
+    try:
+
+        sl_promedio = float(sl_promedio_str or 0)
+        sl_last     = float(sl_last_str or 0)
+
+        # Ningún SL disponible
+        if sl_promedio <= 0 and sl_last <= 0:
+
+            logger.info(
+                f"ℹ️ [{robot}] SL broker omitido — "
+                f"sl_promedio=0 y sl_last=0"
+            )
+
+            return
+
+        # Solo candidatos válidos
+        candidates = [v for v in [sl_promedio, sl_last] if v > 0]
+
+        if not candidates:
+
+            logger.info(
+                f"ℹ️ [{robot}] SL broker omitido — sin candidatos válidos"
+            )
+
+            return
+
+        # LONG → coger el más cercano por abajo
+        if position_side == "LONG":
+
+            sl_raw = min(candidates)
+
+            # pequeño margen para evitar trigger prematuro
+            sl_broker = round(sl_raw * 0.99, 8)
+
+            close_side = "SELL"
+
+        # SHORT → coger el más cercano por arriba
+        else:
+
+            sl_raw = max(candidates)
+
+            sl_broker = round(sl_raw * 1.01, 8)
+
+            close_side = "BUY"
+
+        logger.info(
+            f"🛡️ [{robot}] SL broker {position_side} {symbol} — "
+            f"sl_promedio={sl_promedio} "
+            f"sl_last={sl_last} "
+            f"→ sl_raw={sl_raw} "
+            f"→ sl_broker={sl_broker}"
+        )
+
+        result = place_stop_order(
+            symbol=symbol,
+            side=close_side,
+            position_side=position_side,
+            stop_price=sl_broker,
+            quantity=qty,
+            robot=robot
+        )
+
+        if result.get("code") != 0:
+
+            logger.warning(
+                f"⚠️ [{robot}] SL broker no colocado — "
+                f"code={result.get('code')} "
+                f"msg={result.get('msg')} "
+                f"— TV seguirá gestionando SL"
+            )
+
+    except Exception as e:
+
+        logger.error(
+            f"❌ [{robot}] Excepción en _send_sl_broker: {e}"
+        )
+        
 # ============================================================
 # 🚀 DISPATCHER PRINCIPAL
 # ============================================================
@@ -240,6 +342,15 @@ def _entry_long(symbol: str, price: str, robot: str, payload: dict) -> dict:
         update_entry(symbol, "LONG", price_exec, qty)
         increment_pyramid(symbol, "LONG")
         update_bar_time(symbol, payload.get("time", ""), payload.get("tf", ""))
+        # 🛡️ SL BROKER
+        _send_sl_broker(
+            symbol,
+            "LONG",
+            qty,
+            payload.get("sl_promedio", "0"),
+            payload.get("sl_last", "0"),
+            robot
+        )
 
         logger.info(f"✅ ENTRY_LONG ejecutado y state actualizado [{robot}]")
 
@@ -295,6 +406,15 @@ def _entry_short(symbol: str, price: str, robot: str, payload: dict) -> dict:
         update_entry(symbol, "SHORT", price_exec, qty)
         increment_pyramid(symbol, "SHORT")
         update_bar_time(symbol, payload.get("time", ""), payload.get("tf", ""))
+        # 🛡️ SL BROKER
+        _send_sl_broker(
+            symbol,
+            "SHORT",
+            qty,
+            payload.get("sl_promedio", "0"),
+            payload.get("sl_last", "0"),
+            robot
+        )
         
         logger.info(f"✅ ENTRY_SHORT ejecutado y state actualizado [{robot}]")
 
@@ -436,6 +556,15 @@ def _giro_long(symbol, price, robot, payload):
         update_entry(symbol, "LONG", price_exec, qty)
         increment_pyramid(symbol, "LONG")
         update_bar_time(symbol, payload.get("time", ""), payload.get("tf", ""))
+        # 🛡️ SL BROKER
+        _send_sl_broker(
+            symbol,
+            "LONG",
+            qty,
+            payload.get("sl_promedio", "0"),
+            payload.get("sl_last", "0"),
+            robot
+        )
 
         logger.info(f"✅ GIRO_LONG completo [{robot}]")
 
@@ -530,6 +659,15 @@ def _giro_short(symbol, price, robot, payload):
         update_entry(symbol, "SHORT", price_exec, qty)
         increment_pyramid(symbol, "SHORT")
         update_bar_time(symbol, payload.get("time", ""), payload.get("tf", ""))
+        # 🛡️ SL BROKER
+        _send_sl_broker(
+            symbol,
+            "SHORT",
+            qty,
+            payload.get("sl_promedio", "0"),
+            payload.get("sl_last", "0"),
+            robot
+        )
 
         logger.info(f"✅ GIRO_SHORT completo [{robot}]")
 
