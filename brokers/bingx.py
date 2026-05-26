@@ -437,6 +437,90 @@ def place_stop_order(
 
     return data
 
+# ============================================================
+# 🗑️ CANCELAR ORDEN — STOP BROKER REFRESH
+# ============================================================
+
+def cancel_order(symbol: str, order_id: str, robot: str = "") -> dict:
+    """
+    Cancela una orden pendiente por orderId.
+
+    Usado para:
+    cancelar STOP_MARKET anterior antes de colocar uno nuevo.
+
+    IMPORTANTE:
+    - Si ya ejecutó o no existe → solo warning.
+    - NO activa emergency.
+    """
+
+    if SIMULATION_MODE:
+        logger.info(
+            f"🧪 SIMULATION — [{robot}] CANCEL "
+            f"order_id={order_id} {symbol}"
+        )
+        return {
+            "simulation": True,
+            "code": 0
+        }
+
+    symbol = normalize_symbol(symbol)
+
+    params = {
+        "symbol":  symbol,
+        "orderId": order_id,
+    }
+
+    try:
+
+        qs  = _build_query(params)
+        sig = _sign(qs)
+
+        url = (
+            f"{BINGX_BASE_URL}"
+            f"/openApi/swap/v2/trade/order"
+            f"?{qs}&signature={sig}"
+        )
+
+        logger.info(
+            f"🗑️ [{robot}] CANCEL "
+            f"order_id={order_id} {symbol}"
+        )
+
+        response = requests.delete(
+            url,
+            headers=_headers(),
+            timeout=ORDER_TIMEOUT
+        )
+
+        data = response.json()
+        code = data.get("code")
+
+        if code == 0:
+
+            logger.info(
+                f"✅ [{BINGX_ENV.upper()}][{robot}] CANCEL OK — "
+                f"order_id={order_id} {symbol}"
+            )
+
+        else:
+
+            logger.warning(
+                f"⚠️ [{BINGX_ENV.upper()}][{robot}] CANCEL no ejecutado — "
+                f"order_id={order_id} {symbol} "
+                f"code={code} msg={data.get('msg')} "
+                f"(puede que ya ejecutó o no existía)"
+            )
+
+        return data
+
+    except Exception as e:
+
+        logger.error(
+            f"❌ [{robot}] Excepción en cancel_order: {e}"
+        )
+
+        return {}
+
 
 def close_position(
     symbol: str,
