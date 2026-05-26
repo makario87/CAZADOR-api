@@ -201,9 +201,9 @@ def _send_sl_broker(
 
         if code == 0:
 
-            order = result.get("data", {}).get("order", {})
-
-            new_order_id = order.get("orderId")
+            new_order_id = (
+                result.get("_meta", {}).get("order_id")
+            )
 
             set_sl_broker_order_id(
                 symbol,
