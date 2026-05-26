@@ -43,7 +43,7 @@ _state = {
     "started_at":                   None,
     # — detección actividad externa (#3/#4) —
     "our_client_order_ids":         [],
-    "manual_close_detected":        False,
+    "external_close_detected":      False,
     "external_activity_detected":   False,
     # — #9 MULTI-SÍMBOLO — estructura principal —
     "positions": {},
@@ -114,7 +114,7 @@ def load_state():
         logger.info(f"   last_signal:               {_state.get('last_signal')}")
         logger.info(f"   emergency:                 {_state.get('emergency')}")
         logger.info(f"   símbolos activos:          {list(_state['positions'].keys())}")
-        logger.info(f"   manual_close_detected:     {_state.get('manual_close_detected')}")
+        logger.info(f"   external_close_detected:   {_state.get('external_close_detected')}")
         logger.info(f"   external_activity_detected:{_state.get('external_activity_detected')}")
     except Exception as e:
         logger.error(f"❌ Error cargando estado: {e} — arrancando desde cero")
@@ -186,7 +186,7 @@ def reset_state():
             "webhooks_failed":              0,
             "started_at":                   format_log_time(),
             "our_client_order_ids":         [],
-            "manual_close_detected":        False,
+            "external_close_detected":      False,
             "external_activity_detected":   False,
             # #9 — limpiar todas las posiciones
             "positions":                    {},
@@ -369,7 +369,7 @@ def set_flag(key: str, value: bool):
     Escribe flag booleano en state.
     Panel y Telegram solo leen — no calculan.
     """
-    _VALID_FLAGS = {"manual_close_detected", "external_activity_detected"}
+    _VALID_FLAGS = {"external_close_detected", "external_activity_detected"}
     if key not in _VALID_FLAGS:
         logger.warning(f"⚠️ set_flag — key desconocida: {key} (ignorada)")
         return
