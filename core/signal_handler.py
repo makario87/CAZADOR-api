@@ -7,6 +7,7 @@ import time
 from brokers.bingx import (
     place_order,
     place_stop_order,
+    cancel_order,
     close_all_positions,
     get_balance
 )
@@ -17,7 +18,9 @@ from data.state import (
     update_entry,
     increment_pyramid,
     update_bar_time,
-    get_bar_time
+    get_bar_time,
+    get_sl_broker_order_id,
+    set_sl_broker_order_id
 )
 from core.emergency import trigger_emergency
 from config.settings import (
@@ -113,32 +116,77 @@ def _send_sl_broker(
     robot: str
 ) -> None:
     """
-    Coloca STOP_MARKET en BingX como red de seguridad.
+    Coloca/refresca STOP_MARKET en BingX como red de seguridad.
 
-    TV decide y calcula el precio real (sl_broker).
-    Python solo añade margen de emergencia del 1% y coloca la orden.
+    Flujo:
+    - TV calcula sl_broker real.
+    - Python añade margen emergencia.
+    - Si existe STOP anterior → cancelarlo.
+    - Crear STOP nuevo.
+    - Guardar nuevo orderId en state.
+
+    IMPORTANTE:
+    - NO activa emergency si falla.
+    - TV sigue siendo la fuente de verdad.
     """
+
     try:
+
         sl_broker_raw = float(sl_broker_str or 0)
 
         if sl_broker_raw <= 0:
+
             logger.info(
-                f"ℹ️ [{robot}] SL broker omitido — "
-                f"sl_broker=0"
+                f"ℹ️ [{robot}] SL broker omitido — sl_broker=0"
             )
+
             return
 
+        # ====================================================
+        # 📐 Margen emergencia
+        # ====================================================
+
         if position_side == "LONG":
-            sl_final = round(sl_broker_raw * 0.99, 8)
+
+            sl_final  = round(sl_broker_raw * 0.99, 8)
             close_side = "SELL"
+
         else:
-            sl_final = round(sl_broker_raw * 1.01, 8)
+
+            sl_final  = round(sl_broker_raw * 1.01, 8)
             close_side = "BUY"
 
         logger.info(
             f"🛡️ [{robot}] SL broker {position_side} {symbol} — "
             f"sl_broker_tv={sl_broker_raw} → sl_final={sl_final}"
         )
+
+        # ====================================================
+        # 🗑️ Cancelar STOP anterior si existe
+        # ====================================================
+
+        old_order_id = get_sl_broker_order_id(
+            symbol,
+            position_side
+        )
+
+        if old_order_id:
+
+            logger.info(
+                f"🗑️ [{robot}] Cancelando STOP broker anterior "
+                f"{symbol} {position_side} "
+                f"orderId={old_order_id}"
+            )
+
+            cancel_order(
+                symbol=symbol,
+                order_id=old_order_id,
+                robot=robot
+            )
+
+        # ====================================================
+        # 🚀 Crear nuevo STOP
+        # ====================================================
 
         result = place_stop_order(
             symbol=symbol,
@@ -149,14 +197,36 @@ def _send_sl_broker(
             robot=robot
         )
 
-        if result.get("code") != 0:
+        code = result.get("code")
+
+        if code == 0:
+
+            order = result.get("data", {}).get("order", {})
+
+            new_order_id = order.get("orderId")
+
+            set_sl_broker_order_id(
+                symbol,
+                position_side,
+                new_order_id
+            )
+
+            logger.info(
+                f"✅ [{robot}] STOP broker refrescado "
+                f"{symbol} {position_side} "
+                f"newOrderId={new_order_id}"
+            )
+
+        else:
+
             logger.warning(
                 f"⚠️ [{robot}] SL broker no colocado — "
-                f"code={result.get('code')} msg={result.get('msg')} "
+                f"code={code} msg={result.get('msg')} "
                 f"— TV seguirá gestionando SL normalmente"
             )
 
     except Exception as e:
+
         logger.error(
             f"❌ [{robot}] Excepción en _send_sl_broker: {e} "
             f"— continuando sin SL broker"
