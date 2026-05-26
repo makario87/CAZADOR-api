@@ -1,0 +1,231 @@
+# Roadmap — Plan Completo v7
+**Versión: v7 | Sesión 5 | 2026-05-26**
+
+---
+
+## Estado actual
+
+```
+✅ #1  Retry automático BingX
+✅ #2  Log a archivo /tmp
+✅ #3  Detección cierre externo
+✅ #4  Huérfanas — detección básica
+✅ #5  Watchdog BingX
+✅ #6  Health check mejorado
+✅ #9  State multi-símbolo
+✅ #9b Bug pirámide aditiva
+✅ #11 SL broker automático BingX
+⚠️ #7  Emergencia por robot → hasta #12 BD
+⚠️ #8  Tokens por robot → token maestro por estrategia
+❌ #12 BD real ← PRÓXIMA SESIÓN
+❌ #16 Panel web
+❌ #17 Multi-usuario
+❌ #18 Live capital real
+```
+
+---
+
+## 🔴 PRIORIDAD ALTA — Infraestructura SaaS (antes del panel)
+
+### #12 BD real (SQLite → PostgreSQL)
+Prerequisito absoluto de todo lo demás.
+- /tmp inaceptable con clientes reales
+- Tablas: users, bots, subscriptions, configs, trades, api_keys, proxies
+- Schema multi-robot desde el inicio (bot_id, strategy_id)
+- Sesión 6
+
+### #12b State multi-usuario
+- `state[user_id][symbol]` — aislamiento real entre usuarios
+- Sin tocar signal_handler (capa de abstracción)
+- Sesión 7
+
+### #12c Cola por usuario
+- `queue[user_id]` — sin bloqueo cruzado entre usuarios
+- Señal lenta de usuario A no bloquea a usuario B
+- Sesión 7
+
+### #12d Auditoría trades en BD
+- Tabla trades: user_id, bot_id, symbol, side, qty, price, pnl, signal, timestamp
+- Requisito legal para cobrar % sobre beneficios
+- Sesión 8
+
+### #17a Delays escalonados
+- Implementar antes del 2º usuario real simultáneo
+- 5 usuarios × polling 30s × operaciones ≈ 75-100 calls/min → bloqueo BingX
+- Sesión 8
+
+### #17b Proxies por usuario
+- IP fija por API key (~2€/mes por proxy, tarifa plana)
+- Arquitectura: Render → proxy dedicado usuario X → BingX
+- CENTRAL gestiona proxies, no el panel
+- 10 usuarios = ~20€/mes adicionales, coste fijo
+- Sesión 9
+
+### #17c Reconciler por usuario
+- Reconciler independiente por usuario
+- Sin contaminación cruzada
+- Sesión 9
+
+---
+
+## 🟡 PRIORIDAD MEDIA — Multi-usuario + observabilidad
+
+### #17 Multi-usuario completo
+Requiere #12 + #17a + #17b + #17c
+- Token maestro por estrategia/robot → routing interno
+- Ejecución paralela por usuario suscrito
+- Aislamiento completo entre usuarios
+- Sesión 10
+
+### #16 Panel web
+Requiere #12 + #17 completos.
+DESPUÉS de que CENTRAL tenga todos los endpoints.
+- Solo UX encima de base sólida
+- Cada botón tiene su endpoint ya existente
+- Vista proveedor: todos robots, todos clientes
+- Posiciones abiertas + PnL por símbolo
+- Configuración por usuario: leverage, risk_pct, balance ref
+- Acciones remotas: restablecer, cerrar, pausar
+- Estado WebSocket: conectado/latencia/último ping
+- Estado proxy por usuario
+- Flags: external_close_detected, external_activity_detected
+- Sesiones 11-12
+
+### #11b Validación pre-orden
+Requiere #16 panel (config por usuario).
+- Leverage esperado vs BingX real → bloquea + alerta si no coincide
+- Margin mode esperado → bloquea + alerta
+- Hedge mode esperado → bloquea + alerta
+- Balance dentro de rango → warning flexible
+- Sesión 13
+
+### #10 Telegram
+- Notificaciones al proveedor: operaciones, rechazos, emergencias
+- Bot privado por cliente con botones: [RESTABLECER] [CERRAR TODO] [PAUSAR]
+- Canal global solo proveedor
+- Sesión 14
+
+---
+
+## 🔵 PRIORIDAD BAJA
+
+```
+#13  Reporting completo
+#14  Reconciliador avanzado
+#15  Backup state antes de deploy
+#18  Live capital real mínimo
+     Solo después de #12+#17+#16+#11b completados y validados
+```
+
+---
+
+## Orden de sesiones
+
+```
+Sesión 6  → #12 BD real — SQLite primero, schema completo multi-robot
+Sesión 7  → #12b+#12c state y cola multi-usuario
+Sesión 8  → #12d auditoría trades + #17a delays escalonados
+Sesión 9  → #17b proxies + #17c reconciler por usuario
+Sesión 10 → #17 multi-usuario completo
+Sesión 11 → #16 panel básico (encima de base sólida)
+Sesión 12 → #16 panel completo
+Sesión 13 → #11b validación pre-orden
+Sesión 14 → #10 Telegram
+Sesión 15 → #18 live capital real mínimo
+```
+
+---
+
+## Huecos arquitectónicos identificados
+
+### 🔴 Críticos antes de multi-usuario
+- BD real — /tmp inaceptable con clientes reales
+- Aislamiento state por usuario — hoy state es global
+- Cola por usuario — hoy cola global bloquea entre usuarios
+- Rate limit BingX multi-cuenta
+- Proxies por usuario — misma IP para todos es riesgo
+
+### 🟡 Importantes no bloqueantes inmediatos
+- Separación API / Trading Engine (Flask + worker separado)
+- Workers/background jobs robustos
+- Recuperación cola tras crash
+- Almacenamiento cifrado API keys
+- Health checks por usuario
+- Límites por usuario (plan, max_symbols, risk%)
+
+### 🔵 Escalado futuro
+- WebSocket multi-cuenta (trigger: rate limit real o +10 usuarios)
+- Separación microservicios
+
+---
+
+## Schema BD multi-robot (sesión 6)
+
+```sql
+robots
+  id, name, token_maestro, description, active
+
+users
+  id, name, email, telegram_id, active, plan
+
+subscriptions
+  id, user_id, robot_id, active, risk_pct,
+  leverage, capital_pct, proxy_id
+
+api_keys
+  id, user_id, exchange, key_encrypted,
+  secret_encrypted, env (demo/live)
+
+configs
+  id, user_id, robot_id, symbol,
+  params (JSON), updated_at
+
+trades
+  id, user_id, robot_id, symbol, side,
+  qty, price, pnl, signal, timestamp
+
+proxies
+  id, user_id, ip, port, active
+```
+
+Regla de diseño: toda tabla crítica lleva `robot_id` + `user_id` desde el día 1.
+
+---
+
+## Modelo de negocio
+
+```
+200€ setup por cliente (onboarding, configuración TV + BingX)
+20% anual sobre beneficios del robot
+Extractos individuales por cliente (tabla trades en BD)
+Canal Telegram global (solo proveedor escribe)
+Bot Telegram privado por cliente con botones de acción
+```
+
+---
+
+## Bugs conocidos
+
+```
+⚠️ /tmp se borra en cada deploy → fix en #12
+⚠️ Bug triángulo negro misma vela apertura → rarísimo con filtros, dejar
+⚠️ Logs Render free truncados visualmente → no afecta ejecución
+```
+
+---
+
+## Deuda técnica documentada
+
+```
+signal_handler.py: price = payload.get("price","0") → normalizar a float
+Log POST payload verbose → bajar a DEBUG cuando estable
+timezone configurable en /trades y /health (UTC+2 España)
+Pine Script: eliminar input ROBOT_NAME cuando llegue #17
+Pine Script: token maestro por estrategia cuando llegue #17
+logger.py: archivo separado por robot cuando llegue #17
+/logs endpoint en panel para descargar log sin Shell Render
+Campos legacy state.py → limpiar cuando multi-symbol 100% estable
+external_close_detected → separar en 3 flags granulares con panel/BD
+WebSockets privados BingX → implementar cuando trigger real (+10 usuarios)
+Delays escalonados cola → implementar antes del 2º usuario real
+```
