@@ -424,6 +424,12 @@ def place_stop_order(
             f"stop={stop_price} qty={quantity} "
             f"clientId={client_order_id}"
         )
+        order = data.get("data", {}).get("order", {})
+
+        data["_meta"] = {
+            "order_id":        order.get("orderId"),
+            "client_order_id": client_order_id,
+        }
 
     else:
 
