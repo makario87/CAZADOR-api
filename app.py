@@ -5,7 +5,7 @@ Arranque principal del sistema CAZADOR → Python → BingX.
 from flask import Flask, jsonify
 from config.settings import DEMO_MODE, validate
 from routes.webhook import webhook_bp
-from core.queue_manager import _workers, DEFAULT_USER
+from core.queue_manager import _workers, start_worker, DEFAULT_USER
 from core.reconciler import start_reconciler
 from core.emergency import (
     resolve_emergency,
