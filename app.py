@@ -5,7 +5,7 @@ Arranque principal del sistema CAZADOR → Python → BingX.
 from flask import Flask, jsonify
 from config.settings import DEMO_MODE, validate
 from routes.webhook import webhook_bp
-from core.queue_manager import start_worker
+from core.queue_manager import _workers, DEFAULT_USER
 from core.reconciler import start_reconciler
 from core.emergency import (
     resolve_emergency,
@@ -59,7 +59,8 @@ def health():
 
     from core.queue_manager import _worker
 
-    worker_alive = _worker is not None and _worker.is_alive()
+    w = _workers.get(DEFAULT_USER)
+    worker_alive = w is not None and w.is_alive()
 
     # #6 — ping BingX real con latencia
     import time as _time
