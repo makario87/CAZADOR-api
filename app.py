@@ -57,8 +57,6 @@ def health():
 
     state = get_state()
 
-    from core.queue_manager import _worker
-
     w = _workers.get(DEFAULT_USER)
     worker_alive = w is not None and w.is_alive()
 
