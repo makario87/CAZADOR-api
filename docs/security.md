@@ -117,3 +117,18 @@ routes/webhook.py     orquesta todas las capas
 core/emergency.py     activate_emergency() + trigger_emergency()
 config/settings.py    WEBHOOK_REQUIRED_FIELDS, DEDUP_WINDOW_SEC
 ```
+
+## Sesión 9 — Ruta interna QA + rotación tokens
+
+### /internal/test-signal
+- Token exclusivo: INTERNAL_TEST_TOKEN en Render — independiente de WEBHOOK_SECRET_TOKEN
+- Header: X-Internal-Token
+- Salta: timestamp expiry, anti-duplicados, schema TV estricto
+- NO salta: queue, signal_handler, state, trade_log, BD, BingX
+- 503 si INTERNAL_TEST_TOKEN no configurado en Render
+- Logs marcados con [TEST] para distinguir de señales reales
+- Nunca documentar ni exponer públicamente
+
+### Tokens rotados
+- WEBHOOK_SECRET_TOKEN rotado — TradingView actualizado
+- INTERNAL_TEST_TOKEN configurado nuevo en Render
