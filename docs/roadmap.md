@@ -291,3 +291,16 @@ Sesión 12 → Fase 3: tú + padre DEMO simultáneos con panel
 - Deploy verde, /health OK
 - worker_alive, reconciler_alive, watchdog_alive: true
 - Arquitectura multi-usuario base operativa sobre DEFAULT_USER
+
+## Sesión 9 — #12d + ruta interna QA
+
+### Completado
+- ✅ #12d auditoría trades con user_id — TEXT NOT NULL, fallo ruidoso
+- ✅ Fix FK: trades.user_id TEXT NOT NULL — sin referencia a users.id
+- ✅ Ruta interna /internal/test-signal — QA multi-activo validado
+- ✅ Fase 2 completada — multi-símbolo DEMO validado (PENGU + SOL)
+
+### Orden actualizado
+- Sesión 10 → #17a delays escalonados + reconciler por usuario
+- Sesión 11 → Panel MVP operativo
+- Sesión 12 → Fase 3: tú + padre DEMO simultáneos con panel
