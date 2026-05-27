@@ -180,3 +180,28 @@ string _base_entry = _base +
     '","pyramid_current":"' + _pyr_current + 
     '","sl_broker":"'      + _sl_broker + '"'
 ```
+
+---
+## Sesión 6 — Schema validation + Anti-duplicados
+
+### Capa 3 — Schema validation
+Campos obligatorios: `signal`, `robot`, `symbol`, `tf`, `price`, `time`, `token`
+Fallo → 400 Bad Request + Emergency Mode para ese robot.
+Implementado en `utils/security.py` → `validate_schema()`
+
+### Capa 5 — Anti-duplicados
+Hash: `robot + symbol + signal + time[:16]`
+- `time[:16]` truncado a minuto — misma vela = duplicado
+- Ventana: 5 segundos (`DEDUP_WINDOW_SEC=5`)
+- NO activa Emergency — puede ser retry legítimo
+- 409 Duplicate signal
+Implementado en `utils/security.py` → `validate_no_duplicate()`
+
+### Tabla respuestas actualizada
+| Código | Causa | Emergency |
+|---|---|---|
+| 200 queued | Señal válida | No |
+| 200 expired | Timestamp expirado | No |
+| 400 Bad Request | Schema inválido | ✅ Sí |
+| 401 Unauthorized | Token inválido | ✅ Sí |
+| 409 Duplicate | Anti-duplicados | No |
