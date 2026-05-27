@@ -243,3 +243,24 @@ Fix: llamar init_db() explícitamente al arranque en app.py antes de load_state(
 
 ### Pendiente próxima sesión
 - ❌ data/state.py → migrar RAM + /tmp JSON a SQLite (tabla system_state)
+
+## Sesión 7 — #12 BD real (parcial) + replanteo prioridades
+
+### Completado
+- ✅ data/database.py — schema SQLite completo, 8 tablas, idempotente
+- ✅ data/trade_log.py — migrado de CSV /tmp a SQLite
+- ✅ data/state.py — migrado de /tmp JSON a SQLite
+- ✅ init_db() integrado en app.py
+- ✅ QA end-to-end: pirámide + giro validados con SQLite
+
+### Replanteo de prioridades
+Panel operativo adelantado — ya no es estética, es consola operativa necesaria antes de QA multiusuario real a distancia.
+
+### Orden actualizado
+```
+Sesión 8  → #12b state multi-usuario
+Sesión 9  → #12c cola por usuario
+Sesión 10 → #12d auditoría trades + #17a delays
+Sesión 11 → Panel MVP operativo
+Sesión 12 → Fase 3: tú + padre DEMO simultáneos con panel
+```
