@@ -18,6 +18,7 @@ import os
 import threading
 from utils.time_utils import format_log_time
 from logs.logger import get_logger
+from data.database import db_execute, db_fetchone
 
 logger = get_logger(__name__)
 
@@ -96,27 +97,30 @@ def _get_pos(symbol: str) -> dict:
 
 def save_state():
     try:
-        with open(STATE_FILE, "w") as f:
-            json.dump(_state, f, indent=2)
+        db_execute(
+            """INSERT INTO system_state (key, value, updated_at)
+               VALUES ('main', ?, datetime('now'))
+               ON CONFLICT(key) DO UPDATE SET value=excluded.value,
+               updated_at=excluded.updated_at""",
+            (json.dumps(_state),)
+        )
     except Exception as e:
         logger.error(f"❌ Error guardando estado: {e}")
 
 def load_state():
     global _state
-    if not os.path.exists(STATE_FILE):
-        logger.info("📂 No hay estado previo — arrancando desde cero")
-        return
     try:
-        with open(STATE_FILE) as f:
-            saved = json.load(f)
-            _state.update(saved)
-        # Asegurar que positions existe tras cargar (por si viene de versión anterior)
+        row = db_fetchone("SELECT value FROM system_state WHERE key='main'")
+        if not row:
+            logger.info("📂 No hay estado previo — arrancando desde cero")
+            return
+        saved = json.loads(row["value"])
+        _state.update(saved)
         if "positions" not in _state:
             _state["positions"] = {}
-           
         if "emergency_by_robot" not in _state:
             _state["emergency_by_robot"] = {}
-        logger.info(f"✅ Estado restaurado desde disco: {STATE_FILE}")
+        logger.info("✅ Estado restaurado desde SQLite")
         logger.info(f"   last_signal:               {_state.get('last_signal')}")
         logger.info(f"   emergency:                 {_state.get('emergency')}")
         logger.info(f"   emergency_by_robot:        {_state.get('emergency_by_robot')}")
