@@ -4,10 +4,11 @@ Sistema de emergencia.
 Si algo falla, bloquea nuevas órdenes y registra el error.
 TODO: añadir notificaciones (email/Telegram).
 """
-from data.state import update_state
-from logs.logger import get_logger
 import threading
 import time
+
+from data.state import set_robot_emergency, get_robot_emergency, is_any_emergency
+from logs.logger import get_logger
 
 logger = get_logger(__name__)
 
