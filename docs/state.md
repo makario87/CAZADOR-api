@@ -177,3 +177,17 @@ Cuando se llama `set_robot_emergency`:
 - Tabla system_state ya creada en SQLite lista para recibir el estado
 - Migración planificada próxima sesión: save_state() → UPSERT, load_state() → SELECT
 - Resto del código (update_state, get_state, etc.) sin cambios previstos
+
+## Sesión 7 — Migración SQLite completada
+
+### Cambios aplicados
+- Import añadido: `from data.database import db_execute, db_fetchone`
+- `save_state()` → UPSERT en tabla system_state (key='main')
+- `load_state()` → SELECT desde system_state
+- RAM sigue siendo fuente de verdad en caliente
+- Resto de interfaz pública intacta — ningún consumidor tocado
+
+### QA
+- Deploy verde
+- /health OK tras migración
+- State persistente validado en QA end-to-end
