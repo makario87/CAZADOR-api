@@ -119,6 +119,7 @@ def load_state():
         logger.info(f"✅ Estado restaurado desde disco: {STATE_FILE}")
         logger.info(f"   last_signal:               {_state.get('last_signal')}")
         logger.info(f"   emergency:                 {_state.get('emergency')}")
+        logger.info(f"   emergency_by_robot:        {_state.get('emergency_by_robot')}")
         logger.info(f"   símbolos activos:          {list(_state['positions'].keys())}")
         logger.info(f"   external_close_detected:   {_state.get('external_close_detected')}")
         logger.info(f"   external_activity_detected:{_state.get('external_activity_detected')}")
