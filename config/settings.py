@@ -16,6 +16,19 @@ BINGX_API_SECRET = os.getenv("BINGX_API_SECRET", "")
 # ============================================================
 WEBHOOK_SECRET_TOKEN = os.getenv("WEBHOOK_SECRET_TOKEN", "")
 
+# ============================================================
+# 🛡️ SEGURIDAD WEBHOOK — validación schema y anti-duplicados
+# ============================================================
+
+WEBHOOK_REQUIRED_FIELDS = [
+    "signal", "robot", "symbol", "tf", "price", "time", "token"
+]
+
+DEDUP_WINDOW_SEC = int(os.getenv("DEDUP_WINDOW_SEC", "5"))
+
+# POSPUESTO — implementar cuando Cloudflare esté delante de Render:
+# IP whitelist TradingView, rate limit, WAF en Flask
+
 # --- FUTURO: tokens por robot (añadir cuando haya >1 robot) ---
 # ROBOT_TOKENS = {
 #     "CAZADOR_A": os.getenv("TOKEN_CAZADOR_A", ""),
