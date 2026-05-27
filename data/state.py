@@ -29,8 +29,9 @@ STATE_FILE = "/tmp/cazador_state.json"
 _lock  = threading.Lock()
 _state = {
     # — sistema —
-    "emergency":                    False,
-    "emergency_reason":             None,
+    "emergency":                    False,   # legacy — True si cualquier robot en emergency
+    "emergency_reason":             None,    # legacy — última razón global
+    "emergency_by_robot":           {},      # {robot: {"active": bool, "reason": str}}
     "last_signal":                  None,
     "symbol":                       None,
     "blocked":                      False,
@@ -112,6 +113,9 @@ def load_state():
         # Asegurar que positions existe tras cargar (por si viene de versión anterior)
         if "positions" not in _state:
             _state["positions"] = {}
+           
+        if "emergency_by_robot" not in _state:
+            _state["emergency_by_robot"] = {}
         logger.info(f"✅ Estado restaurado desde disco: {STATE_FILE}")
         logger.info(f"   last_signal:               {_state.get('last_signal')}")
         logger.info(f"   emergency:                 {_state.get('emergency')}")
@@ -177,6 +181,7 @@ def reset_state():
         _state.update({
             "emergency":                    False,
             "emergency_reason":             None,
+            "emergency_by_robot":           {},
             "last_signal":                  None,
             "symbol":                       None,
             "blocked":                      False,
