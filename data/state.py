@@ -391,6 +391,47 @@ def set_flag(key: str, value: bool):
     logger.info(f"🚩 Flag [{key}] = {value}")
 
 # ============================================================
+# 🚨 EMERGENCY POR ROBOT — sesión 6
+# ============================================================
+
+def set_robot_emergency(robot: str, active: bool, reason: str = ""):
+    """
+    Activa o desactiva emergency para un robot específico.
+    Mantiene campos legacy emergency/blocked sincronizados
+    (True si CUALQUIER robot está en emergency).
+    """
+    with _lock:
+        robots = _state.setdefault("emergency_by_robot", {})
+        robots[robot] = {"active": active, "reason": reason}
+
+        any_active = any(r["active"] for r in robots.values())
+        _state["emergency"]        = any_active
+        _state["emergency_reason"] = reason if active else (
+            next((r["reason"] for r in robots.values() if r["active"]), None)
+        )
+        _state["blocked"] = any_active
+
+    save_state()
+    status = "ACTIVADA" if active else "RESUELTA"
+    logger.info(f"🚨 Emergency [{robot}] {status}: {reason}")
+
+
+def get_robot_emergency(robot: str) -> dict:
+    """
+    Devuelve estado emergency para un robot.
+    Retorna {"active": False, "reason": ""} si no hay entrada.
+    """
+    with _lock:
+        robots = _state.get("emergency_by_robot", {})
+        return robots.get(robot, {"active": False, "reason": ""})
+
+
+def is_any_emergency() -> bool:
+    """True si cualquier robot está en emergency. Usado por watchdog/health."""
+    with _lock:
+        return _state.get("emergency", False)
+       
+# ============================================================
 # 🛡️ SL BROKER ORDER IDS — #11
 # ============================================================
 
