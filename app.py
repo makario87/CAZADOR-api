@@ -222,6 +222,10 @@ if __name__ == "__main__":
         for e in errors:
             logger.error(f"❌ Config error: {e}")
         logger.warning("⚠️ Arrancando en modo demo por errores de config")
+    # #12 — inicializar BD antes que nada
+    from data.database import init_db
+    init_db()
+    
     # Cargar estado persistente
     load_state()
     # Inicializar contadores BingX en 0 si no existen
