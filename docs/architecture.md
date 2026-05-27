@@ -138,3 +138,36 @@ TradingView → Webhook → Python Middleware (Render) → BingX API
 
 ### Qué sigue pendiente
 - `data/state.py` → sigue en RAM + /tmp JSON (próxima sesión)
+
+## Sesión 7 — Decisión arquitectónica: subcuenta dedicada obligatoria
+
+### Filosofía
+El usuario NO conecta su cuenta principal BingX.
+Conecta una subcuenta exclusiva para uso del bot.
+Esa subcuenta debe usarse únicamente para trading automático CAZADOR.
+
+### Ventajas arquitectónicas
+- Aislamiento total del capital automatizado
+- Reconciler fiable — cualquier posición no registrada es anomalía, no ambigüedad
+- Política de huérfanas puede ser más agresiva con menos riesgo
+- Kill switch más seguro
+- Auditoría y routing más claros
+- Menos soporte y debugging
+
+### Impacto en política de huérfanas
+Con subcuenta dedicada, una posición no registrada por Python
+ya no es "el usuario tocó algo" — es siempre desync serio, bug,
+intervención externa u operación residual.
+Política futura válida: alerta fuerte + bloqueo temporal + revisión obligatoria.
+
+### Política QA/desarrollo
+- Todas las pruebas en DEMO sobre entorno propio del creador
+- Nunca sobre usuarios reales
+- Nunca mezclando entornos live de clientes
+- Impacto de errores de desarrollo aislado al entorno demo del creador
+
+### Pendiente verificar antes de live
+- Subcuentas BingX soportan hedge mode
+- Permisos API correctos en subcuenta
+- Transferencias de fondos entre cuenta principal y subcuenta
+- Límites y restricciones BingX en subcuentas
