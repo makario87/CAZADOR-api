@@ -12,9 +12,16 @@ BINGX_API_KEY    = os.getenv("BINGX_API_KEY", "")
 BINGX_API_SECRET = os.getenv("BINGX_API_SECRET", "")
 
 # ============================================================
-# 🔐 SEGURIDAD WEBHOOK — token principal
+# 🔐 SEGURIDAD WEBHOOK — token principal (TradingView)
 # ============================================================
 WEBHOOK_SECRET_TOKEN = os.getenv("WEBHOOK_SECRET_TOKEN", "")
+
+# ============================================================
+# 🧪 SEGURIDAD RUTA INTERNA — token exclusivo QA/testing
+# Solo para /internal/test-signal — NUNCA compartir con TV
+# Añadir en Render: INTERNAL_TEST_TOKEN=<valor_seguro>
+# ============================================================
+INTERNAL_TEST_TOKEN = os.getenv("INTERNAL_TEST_TOKEN", "")
 
 # ============================================================
 # 🛡️ SEGURIDAD WEBHOOK — validación schema y anti-duplicados
@@ -69,6 +76,7 @@ ORDER_CONFIRM_TIMEOUT  = 5     # Segundos para confirmar orden
 ORDER_TIMEOUT          = int(os.getenv("ORDER_TIMEOUT", "10"))  # Timeout HTTP órdenes BingX
 GIRO_BUFFER_SECONDS    = 0.3   # Espera entre cierre y apertura en giros
 RECONCILE_INTERVAL     = 30    # Segundos entre reconciliaciones automáticas
+
 # ============================================================
 # 💰 SIZING — cálculo de qty en Python
 # ============================================================
@@ -80,6 +88,7 @@ RECONCILE_INTERVAL     = 30    # Segundos entre reconciliaciones automáticas
 # Configurable desde Render sin tocar codigo.
 # Futuro: config por robot {"CAZADOR": 0.05, "HUNTER": 0.03}
 RISK_PCT = float(os.getenv("RISK_PCT_DEFAULT", "0.05"))  # 5% por defecto
+
 # ============================================================
 # 📈 PIRÁMIDE — control máximo entradas por lado
 # ============================================================
@@ -98,4 +107,6 @@ def validate():
             errors.append("BINGX_API_SECRET no configurada")
     if not WEBHOOK_SECRET_TOKEN:
         errors.append("WEBHOOK_SECRET_TOKEN no configurada")
+    if not INTERNAL_TEST_TOKEN:
+        errors.append("INTERNAL_TEST_TOKEN no configurada — ruta /internal/test-signal deshabilitada")
     return errors
