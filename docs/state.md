@@ -191,3 +191,32 @@ Cuando se llama `set_robot_emergency`:
 - Deploy verde
 - /health OK tras migración
 - State persistente validado en QA end-to-end
+
+## Sesión 8 — #12b Multi-usuario base
+
+### Cambio arquitectónico
+Antes: `_state` dict global único.
+Ahora: `_states[user_id]` — cada usuario tiene su propio estado aislado.
+
+### Constante de transición
+`DEFAULT_USER = "default"` — puente de compatibilidad.
+No es identidad final. Futuro: "makario", "padre_demo", "cliente_1", etc.
+
+### Implementado
+- `_states = { user_id: state_dict }`
+- `_default_state()` — estado base limpio por usuario
+- `_get_user_state(user_id)` — helper interno
+- `get_all_user_ids()` — nuevo, para reconciler y panel
+- Todas las funciones públicas aceptan `user_id: str = DEFAULT_USER`
+- `save_state(user_id)` → key `state:<user_id>` en SQLite
+- `load_state()` → carga todos los `state:*` + migra legacy `key='main'` → `state:default`
+
+### Sin tocar todavía
+signal_handler.py, queue_manager.py, reconciler.py, emergency.py
+Siguen funcionando con DEFAULT_USER implícito.
+
+### QA
+- Deploy verde
+- /health OK
+- reconciler, worker, watchdog vivos
+- Compatibilidad total con sistema actual validada
