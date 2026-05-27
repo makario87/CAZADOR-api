@@ -170,3 +170,5 @@ Cuando se llama `set_robot_emergency`:
 - `emergency = True` si cualquier robot activo
 - `blocked = True` si cualquier robot activo
 - `emergency_reason` = razón del robot activo
+
+
