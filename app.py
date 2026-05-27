@@ -171,9 +171,35 @@ def trades_csv():
 
 @app.route("/emergency/resolve", methods=["POST"])
 def emergency_resolve():
-    """Resuelve la emergencia manualmente desde el panel."""
-    resolve_emergency()
-    return jsonify({"status": "emergency_resolved"})
+    """
+    Resuelve emergency manualmente desde el panel.
+    Sin parámetro → resuelve TODOS los robots activos + GLOBAL.
+    Con ?robot=CAZADOR → resuelve solo ese robot.
+    """
+    from flask import request as freq
+    from data.state import get_state
+
+    robot = freq.args.get("robot")
+
+    if robot:
+        resolve_emergency(robot=robot)
+        return jsonify({"status": "emergency_resolved", "robot": robot})
+
+    # Sin parámetro → resolver todos
+    state = get_state()
+    robots = state.get("emergency_by_robot", {})
+    resolved = []
+
+    for r in list(robots.keys()):
+        resolve_emergency(robot=r)
+        resolved.append(r)
+
+    resolve_emergency(robot="GLOBAL")  # por si acaso
+
+    return jsonify({
+        "status": "emergency_resolved",
+        "resolved": resolved
+    })
 
 @app.route("/reset", methods=["POST"])
 def reset():
