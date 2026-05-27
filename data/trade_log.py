@@ -2,28 +2,23 @@
 data/trade_log.py
 
 Registro persistente de todas las operaciones ejecutadas.
-Guarda en RAM + CSV en disco inmediatamente tras cada trade.
+Sesión 7 — #12 BD real: migrado de CSV /tmp a SQLite.
 
-LIMITACIÓN CONOCIDA:
-/tmp se borra con cada deploy nuevo.
-Suficiente para reinicios por inactividad.
-En el futuro esto se reemplaza por SQLite/PostgreSQL
-sin cambiar log_trade() ni el resto del código.
+Interfaz pública sin cambios:
+  log_trade(), get_trades(), get_trades_by_symbol(),
+  get_trades_by_signal(), get_summary(), export_csv_string(),
+  clear_trades(), load_trades()
 """
 import csv
 import io
-import os
-import threading
 from utils.time_utils import format_log_time
+from data.database import db_execute, db_fetchall
 from logs.logger import get_logger
 
 logger = get_logger(__name__)
 
-# ============================================================
-# 📁 ARCHIVO DE PERSISTENCIA
-# ============================================================
-TRADES_FILE = "/tmp/cazador_trades.csv"
-
+# Mantenido por compatibilidad con csv_exporter y cualquier
+# código que importe TRADE_FIELDS directamente
 TRADE_FIELDS = [
     "timestamp",
     "robot",
@@ -35,44 +30,34 @@ TRADE_FIELDS = [
     "demo",
 ]
 
-_lock   = threading.Lock()
-_trades = []
 
 # ============================================================
-# 💾 PERSISTENCIA
+# 🔧 HELPER INTERNO
+# ============================================================
+
+def _side_from_signal(signal: str) -> str:
+    """Infiere LONG/SHORT del nombre de señal para columna side."""
+    s = signal.upper()
+    if any(x in s for x in ("LONG", "BUY", "ENTRY_L")):
+        return "LONG"
+    if any(x in s for x in ("SHORT", "SELL", "ENTRY_S")):
+        return "SHORT"
+    return "UNKNOWN"
+
+
+# ============================================================
+# 💾 COMPATIBILIDAD ARRANQUE
 # ============================================================
 
 def load_trades():
     """
-    Carga trades previos desde CSV al arrancar.
-    Si no existe el archivo arranca desde cero.
+    Era necesario en la versión CSV para cargar /tmp al arrancar.
+    Con SQLite los datos ya están en BD — no hace nada.
+    Mantenido para no romper app.py.
     """
-    global _trades
-    if not os.path.exists(TRADES_FILE):
-        logger.info("📂 No hay trades previos — historial desde cero")
-        return
+    count = db_fetchall("SELECT COUNT(*) as n FROM trades")[0]["n"]
+    logger.info(f"✅ BD trades lista — {count} trades históricos")
 
-    try:
-        with open(TRADES_FILE, "r") as f:
-            reader = csv.DictReader(f)
-            loaded = list(reader)
-            with _lock:
-                _trades = loaded
-        logger.info(f"✅ {len(_trades)} trades restaurados desde disco")
-    except Exception as e:
-        logger.error(f"❌ Error cargando trades: {e}")
-
-def _append_to_csv(trade: dict):
-    """Añade una línea al CSV en disco inmediatamente."""
-    try:
-        file_exists = os.path.exists(TRADES_FILE)
-        with open(TRADES_FILE, "a", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=TRADE_FIELDS)
-            if not file_exists:
-                writer.writeheader()
-            writer.writerow({k: trade.get(k, "") for k in TRADE_FIELDS})
-    except Exception as e:
-        logger.error(f"❌ Error escribiendo trade al CSV: {e}")
 
 # ============================================================
 # 📝 REGISTRO DE TRADES
@@ -88,80 +73,91 @@ def log_trade(
     demo:    bool = True,
 ):
     """
-    Registra una operación ejecutada.
-    Guarda en RAM y persiste al CSV inmediatamente.
+    Registra una operación ejecutada en SQLite.
+    Misma firma que la versión CSV — sin cambios para signal_handler.
     """
-    trade = {
-        "timestamp": format_log_time(),
-        "robot":     robot,
-        "symbol":    symbol,
-        "signal":    signal,
-        "qty":       str(qty),
-        "price":     str(price),
-        "result":    str(result),
-        "demo":      str(demo),
-    }
+    try:
+        db_execute(
+            """INSERT INTO trades
+               (symbol, side, signal, qty, price, result, demo, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                symbol,
+                _side_from_signal(signal),
+                signal,
+                float(qty)   if qty   else None,
+                float(price) if price else None,
+                str(result),
+                1 if demo else 0,
+                format_log_time(),
+            )
+        )
+        logger.info(
+            f"📝 Trade registrado: {signal} | {symbol} | "
+            f"qty={qty} | demo={demo}"
+        )
+    except Exception as e:
+        logger.error(f"❌ Error registrando trade: {e}")
 
-    with _lock:
-        _trades.append(trade)
-
-    _append_to_csv(trade)
-    logger.info(f"📝 Trade registrado: {signal} | {symbol} | qty={qty} | demo={demo}")
 
 # ============================================================
 # 📊 CONSULTAS
 # ============================================================
 
 def get_trades() -> list:
-    """Retorna copia del historial completo."""
-    with _lock:
-        return _trades.copy()
+    """Retorna todos los trades como lista de dicts."""
+    rows = db_fetchall("SELECT * FROM trades ORDER BY id")
+    return [dict(r) for r in rows]
+
 
 def get_trades_by_symbol(symbol: str) -> list:
     """Filtra trades por símbolo."""
-    with _lock:
-        return [t for t in _trades if t.get("symbol") == symbol]
+    rows = db_fetchall(
+        "SELECT * FROM trades WHERE symbol=? ORDER BY id",
+        (symbol,)
+    )
+    return [dict(r) for r in rows]
+
 
 def get_trades_by_signal(signal: str) -> list:
     """Filtra trades por tipo de señal."""
-    with _lock:
-        return [t for t in _trades if t.get("signal") == signal]
+    rows = db_fetchall(
+        "SELECT * FROM trades WHERE signal=? ORDER BY id",
+        (signal,)
+    )
+    return [dict(r) for r in rows]
+
 
 def get_summary() -> dict:
     """Resumen rápido del historial."""
-    with _lock:
-        total    = len(_trades)
-        symbols  = list(set(t.get("symbol", "") for t in _trades))
-        signals  = list(set(t.get("signal", "") for t in _trades))
-        last     = _trades[-1] if _trades else None
-
+    rows   = db_fetchall("SELECT * FROM trades ORDER BY id")
+    trades = [dict(r) for r in rows]
     return {
-        "total_trades":  total,
-        "symbols":       symbols,
-        "signals_seen":  signals,
-        "last_trade":    last,
+        "total_trades":  len(trades),
+        "symbols":       list(set(t["symbol"] for t in trades)),
+        "signals_seen":  list(set(t["signal"] for t in trades)),
+        "last_trade":    trades[-1] if trades else None,
     }
+
 
 # ============================================================
 # 📤 EXPORTACIÓN
 # ============================================================
 
 def export_csv_string() -> str:
-    """Exporta todos los trades como string CSV."""
+    """Exporta todos los trades como string CSV. Misma firma que antes."""
     trades = get_trades()
     if not trades:
         return ""
-
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=TRADE_FIELDS)
     writer.writeheader()
-    writer.writerows(trades)
+    for t in trades:
+        writer.writerow({k: t.get(k, "") for k in TRADE_FIELDS})
     return output.getvalue()
 
+
 def clear_trades():
-    """Limpia historial en RAM y disco. Solo para debug."""
-    with _lock:
-        _trades.clear()
-    if os.path.exists(TRADES_FILE):
-        os.remove(TRADES_FILE)
+    """Limpia historial completo. Solo para debug."""
+    db_execute("DELETE FROM trades")
     logger.info("🗑️ Historial de trades limpiado")
