@@ -119,3 +119,22 @@ Panel actualiza estados + Telegram alertas individuales
 /reports/csv_exporter.py   Exportar CSV
 /config/settings.py        Variables entorno
 ```
+
+## Sesión 7 — BD SQLite introducida
+
+### Stack actualizado
+TradingView → Webhook → Python Middleware (Render) → BingX API
+                                     ↓
+                              SQLite (cazador.db)
+
+### Archivo nuevo
+`data/database.py` — inicialización SQLite, schema completo, helpers genéricos.
+
+### Tablas creadas
+- robots, users, api_keys, subscriptions, configs, trades, system_state, proxies
+
+### Qué migró
+- `data/trade_log.py` → trades persistentes en SQLite (antes CSV en /tmp)
+
+### Qué sigue pendiente
+- `data/state.py` → sigue en RAM + /tmp JSON (próxima sesión)
