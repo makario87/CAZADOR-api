@@ -8,6 +8,7 @@ from core.queue_manager import enqueue
 from core.emergency import activate_emergency
 from logs.logger import get_logger
 from data.state import record_webhook
+from utils.security import validate_schema, validate_no_duplicate
 
 logger = get_logger(__name__)
 webhook_bp = Blueprint("webhook", __name__)
