@@ -4,7 +4,8 @@ routes/webhook.py
 from flask import Blueprint, request, jsonify
 from utils.auth import validate_webhook_token
 from utils.time_utils import is_signal_expired
-from core.queue_manager import enqueue, queue_size
+from core.queue_manager import enqueue
+from core.emergency import activate_emergency
 from logs.logger import get_logger
 from data.state import record_webhook
 
