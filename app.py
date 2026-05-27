@@ -78,6 +78,7 @@ def health():
         "time_now":                     format_log_time(),
         "demo_mode":                    DEMO_MODE,
         "emergency":                    state.get("emergency"),
+        "emergency_by_robot":           state.get("emergency_by_robot", {}),
         "blocked":                      state.get("blocked"),
         "queue_size":                   queue_size(),
         "worker_alive":                 worker_alive,
