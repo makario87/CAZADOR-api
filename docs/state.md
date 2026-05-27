@@ -150,3 +150,23 @@ Campos `sl_broker_order_id_long` y `sl_broker_order_id_short` en `positions[symb
 - `/tmp` se borra en cada deploy → fix en #12 BD real
 - State global por proceso → multi-usuario requiere `state[user_id][symbol]` (#12b)
 - Campos legacy se eliminarán cuando multi-symbol esté 100% estable
+
+---
+## Sesión 6 — Emergency por robot
+
+### Campo nuevo en _state
+```python
+"emergency_by_robot": {}  # {robot: {"active": bool, "reason": str}}
+```
+Se inicializa vacío si no existe en disco (migración limpia).
+
+### Funciones nuevas
+- `set_robot_emergency(robot, active, reason)` — activa/desactiva + sync legacy
+- `get_robot_emergency(robot)` — devuelve `{"active": bool, "reason": str}`
+- `is_any_emergency()` — True si cualquier robot en emergency
+
+### Sync legacy automático
+Cuando se llama `set_robot_emergency`:
+- `emergency = True` si cualquier robot activo
+- `blocked = True` si cualquier robot activo
+- `emergency_reason` = razón del robot activo
