@@ -105,3 +105,28 @@ Garantiza que un reinicio por inactividad (Render free) no desincroniza el estad
   "external_activity_detected": false
 }
 ```
+
+## Sesión 7 — QA huérfanas tras migración SQLite
+
+### Comportamiento observado
+Durante pruebas/redeploys quedaron posiciones demo antiguas abiertas en BingX.
+El reconciler reaccionó correctamente:
+- Detectó DESYNC
+- Detectó posición huérfana LONG BTC-USDT
+- Marcó external_activity_detected=True
+- NO cerró automáticamente — comportamiento conservador esperado
+- Tras cierre manual en BingX: "Sin posiciones abiertas — estado sincronizado"
+
+### Conclusión
+Detección de huérfanas funciona correctamente tras migración SQLite y restart.
+
+### Decisión arquitectónica pendiente — política de huérfanas (antes de live)
+Casos reales: cierre manual en app móvil, botón accidental, otra API, desync broker.
+Opciones a evaluar (no implementar ahora):
+- Solo alertar (comportamiento actual)
+- Bloqueo temporal del trading automático
+- Reclaim/adoptar posición huérfana como propia
+- Autoclose tras timeout configurable
+- Validación extra antes de nueva entrada
+
+Decisión: definir política antes de pasar a live con capital real.
