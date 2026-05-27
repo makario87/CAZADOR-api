@@ -220,3 +220,16 @@ Siguen funcionando con DEFAULT_USER implícito.
 - /health OK
 - reconciler, worker, watchdog vivos
 - Compatibilidad total con sistema actual validada
+
+## Sesión 9 — #12d Auditoría trades con user_id
+
+### trade_log.py
+- user_id obligatorio sin default en log_trade() — ValueError si vacío o None
+- INSERT trades incluye user_id
+- get_trades/summary/export/clear aceptan user_id opcional para filtrar
+- user_id añadido a TRADE_FIELDS
+
+### signal_handler.py
+- user_id propagado explícitamente a todas las llamadas log_trade
+- Todas las ramas: entradas, cierres, giros (close+open), SL long/short
+- Funciones privadas sin default user_id — reciben siempre desde handle_signal  
