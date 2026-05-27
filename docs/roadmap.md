@@ -229,3 +229,17 @@ external_close_detected → separar en 3 flags granulares con panel/BD
 WebSockets privados BingX → implementar cuando trigger real (+10 usuarios)
 Delays escalonados cola → implementar antes del 2º usuario real
 ```
+## Sesión 7 — #12 BD real (parcial)
+
+### Completado
+- ✅ data/database.py — schema SQLite completo, 8 tablas, idempotente
+- ✅ data/trade_log.py — migrado de CSV /tmp a SQLite
+- ✅ init_db() integrado en app.py antes de load_state()/load_trades()
+- ✅ QA: /health OK, /trades OK, trades persistentes en BD
+
+### Bug detectado y resuelto
+init_db() no se ejecutaba antes de load_trades() → OperationalError: no such table: trades
+Fix: llamar init_db() explícitamente al arranque en app.py antes de load_state()
+
+### Pendiente próxima sesión
+- ❌ data/state.py → migrar RAM + /tmp JSON a SQLite (tabla system_state)
