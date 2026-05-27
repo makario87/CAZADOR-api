@@ -34,6 +34,31 @@ def receive_signal():
     if not validate_webhook_token(request, payload):
         record_webhook("UNAUTHORIZED", ok=False)
         return jsonify({"error": "Unauthorized"}), 401
+
+    # ── Capa 3 — Schema validation ─────────────────────────────
+    ok, motivo = validate_schema(payload)
+    
+    if not ok:
+        robot = payload.get("robot", "UNKNOWN")
+    
+        logger.critical(
+            f"🚨 SCHEMA INVÁLIDO — robot={robot} | {motivo}"
+        )
+    
+        record_webhook(
+            f"SCHEMA_FAIL:{motivo[:40]}",
+            ok=False
+        )
+    
+        _trigger_emergency(
+            robot,
+            f"schema_invalido:{motivo}"
+        )
+    
+        return jsonify({
+            "error": "Bad Request",
+            "reason": motivo
+        }), 400
         
     signal = payload.get("signal", "UNKNOWN")
 
@@ -52,7 +77,24 @@ def receive_signal():
         record_webhook(signal + "_EXPIRED", ok=False)
     
         return jsonify({"status": "expired"}), 200
+        
+    # ── Capa 5 — Anti-duplicados ──────────────────────────
+    # NO activa emergency — puede ser retry legítimo.
+    ok, motivo = validate_no_duplicate(payload)
 
+    if not ok:
+        logger.warning(
+            f"⚠️ DUPLICADO descartado | "
+            f"{payload.get('robot')} | {motivo}"
+        )
+
+        record_webhook(
+            f"DUPLICATE:{motivo[:40]}",
+            ok=False
+        )
+
+        return jsonify({"error": "Duplicate signal"}), 409
+        
     record_webhook(signal, ok=True)
 
     enqueue(payload)
@@ -60,3 +102,28 @@ def receive_signal():
     logger.info(f"✅ Señal aceptada: {signal} | {payload.get('symbol')}")
     
     return jsonify({"status": "queued"}), 200
+
+
+def _trigger_emergency(robot: str, motivo: str) -> None:
+    """
+    Activa Emergency Mode para el robot afectado.
+    """
+    try:
+
+        logger.critical(
+            f"🚨 EMERGENCY MODE | "
+            f"robot={robot} | motivo={motivo}"
+        )
+
+        activate_emergency(
+            robot=robot,
+            reason=f"SECURITY:{motivo}"
+        )
+
+    except Exception as e:
+
+        logger.critical(
+            f"🚨 EMERGENCY FALLÓ | "
+            f"robot={robot} | "
+            f"error={e}"
+        )
