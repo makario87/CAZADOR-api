@@ -3,8 +3,9 @@ data/trade_log.py
 
 Registro persistente de todas las operaciones ejecutadas.
 Sesión 7 — #12 BD real: migrado de CSV /tmp a SQLite.
+Sesión 9 — #12d: user_id obligatorio en log_trade + propagado a consultas.
 
-Interfaz pública sin cambios:
+Interfaz pública sin cambios de firma excepto log_trade (añade user_id obligatorio):
   log_trade(), get_trades(), get_trades_by_symbol(),
   get_trades_by_signal(), get_summary(), export_csv_string(),
   clear_trades(), load_trades()
@@ -28,6 +29,7 @@ TRADE_FIELDS = [
     "price",
     "result",
     "demo",
+    "user_id",   # añadido sesión 9
 ]
 
 
@@ -69,19 +71,31 @@ def log_trade(
     qty:     float,
     price:   str,
     result:  dict,
+    user_id: str,          # OBLIGATORIO — sin default intencional
     robot:   str  = "CAZADOR",
     demo:    bool = True,
 ):
     """
     Registra una operación ejecutada en SQLite.
-    Misma firma que la versión CSV — sin cambios para signal_handler.
+
+    user_id es obligatorio y posicional-por-nombre para que ninguna
+    rama del caller pueda omitirlo silenciosamente.
+    Si llega vacío o None se lanza ValueError — fallo ruidoso preferido
+    a auditoría silenciosa con user_id nulo.
     """
+    if not user_id:
+        raise ValueError(
+            f"log_trade llamado sin user_id — signal={signal} symbol={symbol}. "
+            "Revisar propagación en signal_handler."
+        )
+
     try:
         db_execute(
             """INSERT INTO trades
-               (symbol, side, signal, qty, price, result, demo, timestamp)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+               (user_id, symbol, side, signal, qty, price, result, demo, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
+                user_id,
                 symbol,
                 _side_from_signal(signal),
                 signal,
@@ -94,8 +108,10 @@ def log_trade(
         )
         logger.info(
             f"📝 Trade registrado: {signal} | {symbol} | "
-            f"qty={qty} | demo={demo}"
+            f"qty={qty} | demo={demo} | user={user_id}"
         )
+    except ValueError:
+        raise   # re-lanza el ValueError de user_id vacío
     except Exception as e:
         logger.error(f"❌ Error registrando trade: {e}")
 
@@ -104,39 +120,65 @@ def log_trade(
 # 📊 CONSULTAS
 # ============================================================
 
-def get_trades() -> list:
-    """Retorna todos los trades como lista de dicts."""
-    rows = db_fetchall("SELECT * FROM trades ORDER BY id")
+def get_trades(user_id: str = None) -> list:
+    """
+    Retorna trades como lista de dicts.
+    Si se pasa user_id filtra por ese usuario — recomendado.
+    Sin user_id devuelve todos (uso interno / admin).
+    """
+    if user_id:
+        rows = db_fetchall(
+            "SELECT * FROM trades WHERE user_id=? ORDER BY id",
+            (user_id,)
+        )
+    else:
+        rows = db_fetchall("SELECT * FROM trades ORDER BY id")
     return [dict(r) for r in rows]
 
 
-def get_trades_by_symbol(symbol: str) -> list:
-    """Filtra trades por símbolo."""
-    rows = db_fetchall(
-        "SELECT * FROM trades WHERE symbol=? ORDER BY id",
-        (symbol,)
-    )
+def get_trades_by_symbol(symbol: str, user_id: str = None) -> list:
+    """Filtra trades por símbolo, opcionalmente también por usuario."""
+    if user_id:
+        rows = db_fetchall(
+            "SELECT * FROM trades WHERE symbol=? AND user_id=? ORDER BY id",
+            (symbol, user_id)
+        )
+    else:
+        rows = db_fetchall(
+            "SELECT * FROM trades WHERE symbol=? ORDER BY id",
+            (symbol,)
+        )
     return [dict(r) for r in rows]
 
 
-def get_trades_by_signal(signal: str) -> list:
-    """Filtra trades por tipo de señal."""
-    rows = db_fetchall(
-        "SELECT * FROM trades WHERE signal=? ORDER BY id",
-        (signal,)
-    )
+def get_trades_by_signal(signal: str, user_id: str = None) -> list:
+    """Filtra trades por tipo de señal, opcionalmente también por usuario."""
+    if user_id:
+        rows = db_fetchall(
+            "SELECT * FROM trades WHERE signal=? AND user_id=? ORDER BY id",
+            (signal, user_id)
+        )
+    else:
+        rows = db_fetchall(
+            "SELECT * FROM trades WHERE signal=? ORDER BY id",
+            (signal,)
+        )
     return [dict(r) for r in rows]
 
 
-def get_summary() -> dict:
-    """Resumen rápido del historial."""
-    rows   = db_fetchall("SELECT * FROM trades ORDER BY id")
-    trades = [dict(r) for r in rows]
+def get_summary(user_id: str = None) -> dict:
+    """
+    Resumen rápido del historial.
+    Con user_id: resumen de ese usuario.
+    Sin user_id: resumen global (admin).
+    """
+    trades = get_trades(user_id=user_id)
     return {
         "total_trades":  len(trades),
         "symbols":       list(set(t["symbol"] for t in trades)),
         "signals_seen":  list(set(t["signal"] for t in trades)),
         "last_trade":    trades[-1] if trades else None,
+        "user_id":       user_id or "ALL",
     }
 
 
@@ -144,9 +186,12 @@ def get_summary() -> dict:
 # 📤 EXPORTACIÓN
 # ============================================================
 
-def export_csv_string() -> str:
-    """Exporta todos los trades como string CSV. Misma firma que antes."""
-    trades = get_trades()
+def export_csv_string(user_id: str = None) -> str:
+    """
+    Exporta trades como string CSV.
+    Con user_id: solo ese usuario. Sin user_id: todos.
+    """
+    trades = get_trades(user_id=user_id)
     if not trades:
         return ""
     output = io.StringIO()
@@ -157,7 +202,14 @@ def export_csv_string() -> str:
     return output.getvalue()
 
 
-def clear_trades():
-    """Limpia historial completo. Solo para debug."""
-    db_execute("DELETE FROM trades")
-    logger.info("🗑️ Historial de trades limpiado")
+def clear_trades(user_id: str = None):
+    """
+    Limpia historial. Solo para debug.
+    Con user_id: solo ese usuario. Sin user_id: tabla completa.
+    """
+    if user_id:
+        db_execute("DELETE FROM trades WHERE user_id=?", (user_id,))
+        logger.info(f"🗑️ Historial de trades limpiado — user={user_id}")
+    else:
+        db_execute("DELETE FROM trades")
+        logger.info("🗑️ Historial de trades limpiado — TODOS los usuarios")
