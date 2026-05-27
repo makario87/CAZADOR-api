@@ -171,4 +171,9 @@ Cuando se llama `set_robot_emergency`:
 - `blocked = True` si cualquier robot activo
 - `emergency_reason` = razón del robot activo
 
+## Sesión 7 — Estado pendiente de migración
 
+- state.py sigue usando RAM + /tmp/cazador_state.json
+- Tabla system_state ya creada en SQLite lista para recibir el estado
+- Migración planificada próxima sesión: save_state() → UPSERT, load_state() → SELECT
+- Resto del código (update_state, get_state, etc.) sin cambios previstos
