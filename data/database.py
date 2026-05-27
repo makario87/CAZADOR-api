@@ -4,7 +4,10 @@ data/database.py
 Inicialización y acceso a SQLite.
 Reemplaza /tmp JSON y CSV en producción.
 
-Sesión 7 — #12 BD real
+Sesión 7  — #12 BD real
+Sesión 9  — #12d fix: trades.user_id TEXT NOT NULL (sin FK a users.id)
+            La FK real se añade cuando webhook haga lookup por token
+            y haya flujo de alta de usuarios en BD.
 """
 import sqlite3
 import os
@@ -98,9 +101,11 @@ CREATE TABLE IF NOT EXISTS configs (
 );
 
 -- ── Historial de trades ───────────────────────────────────
+-- user_id es TEXT (ej: "default", "makario", "padre_demo")
+-- FK real a users.id se añade cuando webhook haga lookup por token
 CREATE TABLE IF NOT EXISTS trades (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id    INTEGER REFERENCES users(id),
+    user_id    TEXT    NOT NULL,
     robot_id   INTEGER REFERENCES robots(id),
     symbol     TEXT    NOT NULL,
     side       TEXT    NOT NULL,   -- LONG | SHORT
