@@ -95,9 +95,10 @@ def receive_signal():
 
         return jsonify({"error": "Duplicate signal"}), 409
         
+    # Asignar user_id — hoy siempre "default", futuro: lookup en BD por token/robot
+    payload["user_id"] = payload.get("user_id", "default")
     record_webhook(signal, ok=True)
-
-    enqueue(payload)
+    enqueue(payload, user_id=payload["user_id"])
     
     logger.info(f"✅ Señal aceptada: {signal} | {payload.get('symbol')}")
     
