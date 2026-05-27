@@ -110,7 +110,7 @@ def health():
         "external_close_detected":      state.get("external_close_detected"),
         "external_activity_detected":   state.get("external_activity_detected"),
     })
-    
+
 @app.route("/ping", methods=["GET"])
 def ping():
     """Mantiene vivo el servidor en Render free tier."""
@@ -206,6 +206,77 @@ def reset():
     reset_state()
     return jsonify({"status": "reset_ok"})
 
+
+# ============================================================
+# 🧪 RUTA INTERNA QA — /internal/test-signal
+# ============================================================
+# EXCLUSIVA para pruebas controladas. NUNCA usar desde TradingView.
+# Token independiente: INTERNAL_TEST_TOKEN (variable de entorno Render).
+# Salta: timestamp expiry, anti-duplicados, schema TV estricto.
+# NO salta: queue, signal_handler, state, trade_log, BD, BingX.
+# demo=True forzado siempre — nunca ejecuta con dinero real.
+# Logs marcados con [TEST] para distinguir de señales reales.
+# ============================================================
+
+@app.route("/internal/test-signal", methods=["POST"])
+def internal_test_signal():
+    from flask import request as freq
+    from config.settings import INTERNAL_TEST_TOKEN
+    from core.queue_manager import enqueue
+
+    # ── Autenticación token interno ──────────────────────────
+    if not INTERNAL_TEST_TOKEN:
+        logger.error("🧪 [TEST] INTERNAL_TEST_TOKEN no configurado — ruta deshabilitada")
+        return jsonify({"error": "Test route disabled — INTERNAL_TEST_TOKEN not set"}), 503
+
+    auth_header = freq.headers.get("X-Internal-Token", "")
+    if auth_header != INTERNAL_TEST_TOKEN:
+        logger.warning("🧪 [TEST] Token interno inválido — acceso denegado")
+        return jsonify({"error": "Unauthorized"}), 401
+
+    # ── Parsear payload ──────────────────────────────────────
+    payload = freq.get_json(silent=True, force=True)
+    if not payload:
+        return jsonify({"error": "Invalid JSON"}), 400
+
+    # ── Campos mínimos obligatorios ──────────────────────────
+    # Menos estricto que TV — no requiere time/tf reales
+    required = ["signal", "symbol", "price", "robot"]
+    missing  = [f for f in required if not payload.get(f)]
+    if missing:
+        return jsonify({
+            "error":   "Missing required fields",
+            "missing": missing
+        }), 400
+
+    # ── Inyectar campos de control ───────────────────────────
+    # demo forzado — nunca ejecuta con dinero real desde esta ruta
+    payload["_test_mode"] = True
+    payload["user_id"]    = payload.get("user_id", "default")
+
+    # tf y time opcionales — rellenar con defaults si no vienen
+    if not payload.get("tf"):
+        payload["tf"] = "TEST"
+    if not payload.get("time"):
+        payload["time"] = format_log_time()
+
+    logger.info(
+        f"🧪 [TEST] Señal interna encolada: "
+        f"{payload.get('signal')} | {payload.get('symbol')} | "
+        f"user={payload.get('user_id')} | robot={payload.get('robot')}"
+    )
+
+    enqueue(payload, user_id=payload["user_id"])
+
+    return jsonify({
+        "status":  "queued",
+        "test":    True,
+        "signal":  payload.get("signal"),
+        "symbol":  payload.get("symbol"),
+        "user_id": payload.get("user_id"),
+    }), 200
+
+
 # ============================================================
 # 🔧 ARRANQUE
 # ============================================================
@@ -221,12 +292,14 @@ if __name__ == "__main__":
         for e in errors:
             logger.error(f"❌ Config error: {e}")
         logger.warning("⚠️ Arrancando en modo demo por errores de config")
+
     # #12 — inicializar BD antes que nada
     from data.database import init_db
     init_db()
-    
+
     # Cargar estado persistente
     load_state()
+
     # Inicializar contadores BingX en 0 si no existen
     state = get_state()
     if "bingx_long_count" not in state:
@@ -234,6 +307,7 @@ if __name__ == "__main__":
     update_state({"started_at": format_log_time()})
     load_trades()
     preload_market()
+
     # ── Sincronizar pirámide con BingX al arrancar ──────────
     try:
         from data.state import update_state
@@ -280,14 +354,13 @@ if __name__ == "__main__":
         logger.error(
             f"❌ Error sincronizando pirámide al arrancar: {e}"
         )
-    # ────────────────────────────────────────────────────────
+
     # Arrancar workers
     from core.emergency import start_watchdog
-    
+
     start_worker()
     start_reconciler()
     start_watchdog()
-    
 
     logger.info("✅ Sistema listo")
     app.run(host="0.0.0.0", port=5000, debug=False)
