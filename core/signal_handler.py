@@ -3,6 +3,7 @@ core/signal_handler.py
 Interpreta las señales de CAZADOR y las ejecuta en el broker.
 TradingView manda solo la señal. Python calcula la qty.
 Sesión 8 — #12c: user_id propagado desde payload a todas las llamadas de state.
+Sesión 9 — #12d: user_id propagado a todas las llamadas de log_trade (obligatorio).
 """
 import time
 from brokers.bingx import (
@@ -275,7 +276,7 @@ def handle_signal(payload: dict) -> dict:
 # 📈 ENTRADAS
 # ============================================================
 
-def _entry_long(symbol, price, robot, payload, user_id="default"):
+def _entry_long(symbol, price, robot, payload, user_id):
     qty = _calculate_qty(symbol, price, robot)
 
     if qty <= 0:
@@ -290,7 +291,7 @@ def _entry_long(symbol, price, robot, payload, user_id="default"):
 
     log_trade(
         signal="ENTRY_LONG", symbol=symbol, qty=qty, price=price,
-        result=result, robot=robot, demo=SIMULATION_MODE
+        result=result, user_id=user_id, robot=robot, demo=SIMULATION_MODE
     )
 
     code = result.get("code", -1)
@@ -316,7 +317,7 @@ def _entry_long(symbol, price, robot, payload, user_id="default"):
     }
 
 
-def _entry_short(symbol, price, robot, payload, user_id="default"):
+def _entry_short(symbol, price, robot, payload, user_id):
     qty = _calculate_qty(symbol, price, robot)
 
     if qty <= 0:
@@ -331,7 +332,7 @@ def _entry_short(symbol, price, robot, payload, user_id="default"):
 
     log_trade(
         signal="ENTRY_SHORT", symbol=symbol, qty=qty, price=price,
-        result=result, robot=robot, demo=SIMULATION_MODE
+        result=result, user_id=user_id, robot=robot, demo=SIMULATION_MODE
     )
 
     code = result.get("code", -1)
@@ -361,11 +362,13 @@ def _entry_short(symbol, price, robot, payload, user_id="default"):
 # 📉 CIERRES
 # ============================================================
 
-def _close_long(symbol, price, robot, payload, user_id="default"):
+def _close_long(symbol, price, robot, payload, user_id):
     logger.info(f"⬜ CLOSE_LONG {symbol} [{robot}]")
     result = close_all_positions(symbol, "LONG", robot=robot)
-    log_trade(signal="CLOSE_LONG", symbol=symbol, qty=0, price=price,
-              result=result, robot=robot, demo=SIMULATION_MODE)
+    log_trade(
+        signal="CLOSE_LONG", symbol=symbol, qty=0, price=price,
+        result=result, user_id=user_id, robot=robot, demo=SIMULATION_MODE
+    )
 
     code = result.get("code", -1)
     if code == 0:
@@ -391,11 +394,13 @@ def _close_long(symbol, price, robot, payload, user_id="default"):
             "action": "CLOSE_LONG", "result": result}
 
 
-def _close_short(symbol, price, robot, payload, user_id="default"):
+def _close_short(symbol, price, robot, payload, user_id):
     logger.info(f"⬜ CLOSE_SHORT {symbol} [{robot}]")
     result = close_all_positions(symbol, "SHORT", robot=robot)
-    log_trade(signal="CLOSE_SHORT", symbol=symbol, qty=0, price=price,
-              result=result, robot=robot, demo=SIMULATION_MODE)
+    log_trade(
+        signal="CLOSE_SHORT", symbol=symbol, qty=0, price=price,
+        result=result, user_id=user_id, robot=robot, demo=SIMULATION_MODE
+    )
 
     code = result.get("code", -1)
     if code == 0:
@@ -425,7 +430,7 @@ def _close_short(symbol, price, robot, payload, user_id="default"):
 # 🔄 GIROS
 # ============================================================
 
-def _giro_long(symbol, price, robot, payload, user_id="default"):
+def _giro_long(symbol, price, robot, payload, user_id):
     logger.info(f"🔄 GIRO_LONG {symbol} [{robot}]")
 
     result_close = close_all_positions(symbol, "SHORT", robot=robot)
@@ -449,7 +454,7 @@ def _giro_long(symbol, price, robot, payload, user_id="default"):
             log_trade(
                 signal="GIRO_LONG_CLOSE", symbol=symbol, qty=0,
                 price=price, result=result_close,
-                robot=robot, demo=SIMULATION_MODE
+                user_id=user_id, robot=robot, demo=SIMULATION_MODE
             )
             return {
                 "status": "error", "action": "GIRO_LONG",
@@ -470,12 +475,12 @@ def _giro_long(symbol, price, robot, payload, user_id="default"):
     log_trade(
         signal="GIRO_LONG_CLOSE", symbol=symbol, qty=0,
         price=price, result=result_close,
-        robot=robot, demo=SIMULATION_MODE
+        user_id=user_id, robot=robot, demo=SIMULATION_MODE
     )
     log_trade(
         signal="GIRO_LONG_OPEN", symbol=symbol, qty=qty,
         price=price, result=result_open,
-        robot=robot, demo=SIMULATION_MODE
+        user_id=user_id, robot=robot, demo=SIMULATION_MODE
     )
 
     code_open = result_open.get("code", -1)
@@ -508,7 +513,7 @@ def _giro_long(symbol, price, robot, payload, user_id="default"):
     }
 
 
-def _giro_short(symbol, price, robot, payload, user_id="default"):
+def _giro_short(symbol, price, robot, payload, user_id):
     logger.info(f"🔄 GIRO_SHORT {symbol} [{robot}]")
 
     result_close = close_all_positions(symbol, "LONG", robot=robot)
@@ -532,7 +537,7 @@ def _giro_short(symbol, price, robot, payload, user_id="default"):
             log_trade(
                 signal="GIRO_SHORT_CLOSE", symbol=symbol, qty=0,
                 price=price, result=result_close,
-                robot=robot, demo=SIMULATION_MODE
+                user_id=user_id, robot=robot, demo=SIMULATION_MODE
             )
             return {
                 "status": "error", "action": "GIRO_SHORT",
@@ -553,12 +558,12 @@ def _giro_short(symbol, price, robot, payload, user_id="default"):
     log_trade(
         signal="GIRO_SHORT_CLOSE", symbol=symbol, qty=0,
         price=price, result=result_close,
-        robot=robot, demo=SIMULATION_MODE
+        user_id=user_id, robot=robot, demo=SIMULATION_MODE
     )
     log_trade(
         signal="GIRO_SHORT_OPEN", symbol=symbol, qty=qty,
         price=price, result=result_open,
-        robot=robot, demo=SIMULATION_MODE
+        user_id=user_id, robot=robot, demo=SIMULATION_MODE
     )
 
     code_open = result_open.get("code", -1)
@@ -595,11 +600,13 @@ def _giro_short(symbol, price, robot, payload, user_id="default"):
 # 🛑 STOP LOSS
 # ============================================================
 
-def _sl_long(symbol, signal, price, robot, payload, user_id="default"):
+def _sl_long(symbol, signal, price, robot, payload, user_id):
     logger.info(f"🛑 {signal} {symbol} [{robot}]")
     result = close_all_positions(symbol, "LONG", robot=robot)
-    log_trade(signal=signal, symbol=symbol, qty=0, price=price,
-              result=result, robot=robot, demo=SIMULATION_MODE)
+    log_trade(
+        signal=signal, symbol=symbol, qty=0, price=price,
+        result=result, user_id=user_id, robot=robot, demo=SIMULATION_MODE
+    )
 
     code = result.get("code", -1)
     if code == 0:
@@ -625,11 +632,13 @@ def _sl_long(symbol, signal, price, robot, payload, user_id="default"):
             "action": signal, "result": result}
 
 
-def _sl_short(symbol, signal, price, robot, payload, user_id="default"):
+def _sl_short(symbol, signal, price, robot, payload, user_id):
     logger.info(f"🛑 {signal} {symbol} [{robot}]")
     result = close_all_positions(symbol, "SHORT", robot=robot)
-    log_trade(signal=signal, symbol=symbol, qty=0, price=price,
-              result=result, robot=robot, demo=SIMULATION_MODE)
+    log_trade(
+        signal=signal, symbol=symbol, qty=0, price=price,
+        result=result, user_id=user_id, robot=robot, demo=SIMULATION_MODE
+    )
 
     code = result.get("code", -1)
     if code == 0:
@@ -653,3 +662,6 @@ def _sl_short(symbol, signal, price, robot, payload, user_id="default"):
 
     return {"status": "ok" if code == 0 else "error",
             "action": signal, "result": result}
+
+
+
