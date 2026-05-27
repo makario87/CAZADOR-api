@@ -12,27 +12,40 @@ from logs.logger import get_logger
 
 logger = get_logger(__name__)
 
-def trigger_emergency(reason: str):
-    """Activa modo emergencia — bloquea todas las nuevas órdenes."""
-    logger.error(f"🚨 EMERGENCIA ACTIVADA: {reason}")
-    update_state({
-        "emergency": True,
-        "emergency_reason": reason,
-        "blocked": True
-    })
+def trigger_emergency(reason: str, robot: str = "GLOBAL"):
+    """
+    Activa emergency para un robot específico.
+    robot="GLOBAL" para emergencias de infraestructura (watchdog).
+    """
+    logger.critical(f"🚨 EMERGENCY ACTIVADA | robot={robot} | motivo={reason}")
+    set_robot_emergency(robot=robot, active=True, reason=reason)
 
-def resolve_emergency():
-    """Desactiva modo emergencia manualmente desde el panel."""
-    logger.info("✅ Emergencia resuelta manualmente")
-    update_state({
-        "emergency": False,
-        "emergency_reason": None,
-        "blocked": False
-    })
 
-def is_emergency() -> bool:
-    from data.state import get_state
-    return get_state().get("emergency", False)
+def activate_emergency(robot: str, reason: str):
+    """Alias explícito usado desde webhook.py."""
+    trigger_emergency(reason=reason, robot=robot)
+
+
+def resolve_emergency(robot: str = "GLOBAL"):
+    """
+    Desactiva emergency para un robot específico.
+    """
+    logger.info(f"✅ Emergency resuelta manualmente | robot={robot}")
+    set_robot_emergency(robot=robot, active=False, reason="")
+
+
+def is_emergency(robot: str = None) -> bool:
+    """
+    Sin args → True si cualquier robot está en emergency.
+    Con robot= → True solo si ese robot está en emergency.
+    """
+    if robot is None:
+        return is_any_emergency()
+    return get_robot_emergency(robot).get("active", False)
+
+
+def get_emergency_reason(robot: str = "GLOBAL") -> str:
+    return get_robot_emergency(robot).get("reason", "")
 
 # ============================================================
 # 🐕 WATCHDOG — #5
