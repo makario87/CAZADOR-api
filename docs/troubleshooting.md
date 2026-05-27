@@ -108,3 +108,15 @@
 | ENTRY bloqueada en emergencia | Código: dispatcher bloquea todo excepto PROTECTION_SIGNALS |
 | State no se actualiza si BingX falla | Código: `update_state()` solo se llama si `code == 0` |
 | Anti-duplicados por vela | Código: comparación `bar_time + bar_tf` antes de ejecutar |
+
+## Sesión 9 — Bugs encontrados y resueltos
+
+### FOREIGN KEY constraint failed en trades
+- Causa: trades.user_id era INTEGER REFERENCES users(id)
+- El string "default" no existe como fila en tabla users
+- Fix: trades.user_id TEXT NOT NULL — sin FK a users.id
+- FK real se añade en #17 cuando webhook haga lookup por token
+
+### Prueba multi-activo PowerShell colgada
+- Causa: segundo Invoke-RestMethod bloqueado esperando respuesta del primero
+- Fix: dos terminales independientes en paralelo
