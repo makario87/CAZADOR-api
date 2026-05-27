@@ -119,3 +119,36 @@ O desde el futuro panel con botón [RESTABLECER].
 | GIRO sin posición previa | NO emergencia — abre directamente |
 | SL broker falla | NO emergencia — solo warning |
 | external_close_detected | NO emergencia — state limpiado |
+
+---
+## Sesión 6 — Emergency por robot
+
+### Cambio arquitectónico
+Antes: emergency era bool global — un fallo bloqueaba todo.
+Ahora: emergency por robot — aislamiento granular.
+
+```python
+emergency_by_robot: {
+  "CAZADOR": {"active": true,  "reason": "SECURITY:schema_invalido:..."},
+  "GLOBAL":  {"active": false, "reason": ""}
+}
+```
+Campos legacy `emergency` y `blocked` se mantienen sincronizados.
+
+### Funciones nuevas
+- `trigger_emergency(reason, robot="GLOBAL")` — acepta robot, backward compatible
+- `activate_emergency(robot, reason)` — alias usado desde webhook.py
+- `resolve_emergency(robot="GLOBAL")` — resuelve por robot o todos
+- `is_emergency(robot=None)` — sin args=global, con robot=ese robot
+- `get_emergency_reason(robot="GLOBAL")`
+
+### Endpoint /emergency/resolve — bug detectado y resuelto
+Problema: solo resolvía GLOBAL, dejaba robots activos.
+Fix: itera todos los robots en emergency_by_robot y los resuelve.
+- `POST /emergency/resolve` → resuelve todos
+- `POST /emergency/resolve?robot=CAZADOR` → resuelve solo ese
+
+### Decisión futura — robot vs robot+symbol
+Aislamiento actual por robot: si falla CAZADOR+PEPE caen todos los símbolos.
+Mejora futura: aislamiento por robot+symbol para SaaS multi-activo.
+Estado: pospuesto a fase SaaS real.
