@@ -264,3 +264,30 @@ Sesión 10 → #12d auditoría trades + #17a delays
 Sesión 11 → Panel MVP operativo
 Sesión 12 → Fase 3: tú + padre DEMO simultáneos con panel
 ```
+
+## Sesión 8 — #12b + #12c Multi-usuario base implementado
+
+### #12b — State multi-usuario
+- `_states[user_id]` en vez de `_state` global
+- `DEFAULT_USER = "default"` como puente de compatibilidad
+- Todas las funciones públicas aceptan `user_id=DEFAULT_USER`
+- `save_state(user_id)` → key `state:<user_id>` en SQLite
+- `load_state()` migra automáticamente legacy `key='main'` → `state:default`
+- `get_all_user_ids()` nuevo helper para reconciler y panel
+
+### #12c — Cola multi-usuario
+- `_queues[user_id]` + `_workers[user_id]` en queue_manager
+- `enqueue(payload, user_id)` — sin bloqueo cruzado entre usuarios
+- `user_id` propagado desde webhook → payload → signal_handler → state
+- Webhook asigna `user_id="default"` — futuro: lookup en BD por token/robot
+- `queue_size_all()` nuevo helper para panel
+
+### Bugs encontrados y resueltos
+- `/health` usaba `_worker` legacy → migrado a `_workers[DEFAULT_USER]`
+- `start_worker` faltaba en imports tras refactor
+- Import legacy `_worker` dentro de `def health()` — eliminado
+
+### QA
+- Deploy verde, /health OK
+- worker_alive, reconciler_alive, watchdog_alive: true
+- Arquitectura multi-usuario base operativa sobre DEFAULT_USER
