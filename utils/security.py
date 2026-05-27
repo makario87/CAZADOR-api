@@ -38,13 +38,18 @@ def validate_schema(payload: dict) -> tuple[bool, str]:
 
 def _signal_hash(payload: dict) -> str:
     """
-    Hash único por señal.
+    Hash único por señal — time truncado a minuto [:16].
+    Detecta duplicados dentro de la misma vela.
+    Permite entradas legítimas en velas distintas.
+    Ejemplo: "2026-05-27T10:00" — ignora segundos.
     """
+    tv_time = payload.get("time", "")[:16]
+
     key = (
         f"{payload.get('robot')}|"
         f"{payload.get('symbol')}|"
         f"{payload.get('signal')}|"
-        f"{payload.get('time')}"
+        f"{tv_time}"
     )
 
     return hashlib.sha256(key.encode()).hexdigest()
