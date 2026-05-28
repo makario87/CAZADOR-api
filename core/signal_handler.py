@@ -359,6 +359,28 @@ def _entry_long(symbol, price, robot, payload, user_id):
         update_entry(symbol, "LONG", price_exec, qty, user_id)
         increment_pyramid(symbol, "LONG", user_id)
         update_bar_time(symbol, payload.get("time", ""), payload.get("tf", ""), user_id)
+        # Cancelar SL SHORT zombie si existe antes de colocar SL LONG
+        old_sl_short = get_sl_broker_order_id(symbol, "SHORT", user_id)
+
+        if old_sl_short:
+
+            logger.info(
+                f"🗑️ [{robot}] Cancelando SL SHORT zombie "
+                f"antes de ENTRY_LONG {symbol} orderId={old_sl_short}"
+            )
+
+            cancel_order(
+                symbol=symbol,
+                order_id=old_sl_short,
+                robot=robot
+            )
+
+            set_sl_broker_order_id(
+                symbol,
+                "SHORT",
+                None,
+                user_id
+            )                
         _send_sl_broker(symbol, "LONG", qty, payload.get("sl_broker", "0"), robot, user_id)
         logger.info(f"✅ ENTRY_LONG ejecutado y state actualizado [{robot}]")
     else:
@@ -464,6 +486,28 @@ def _entry_short(symbol, price, robot, payload, user_id):
         update_entry(symbol, "SHORT", price_exec, qty, user_id)
         increment_pyramid(symbol, "SHORT", user_id)
         update_bar_time(symbol, payload.get("time", ""), payload.get("tf", ""), user_id)
+        # Cancelar SL LONG zombie si existe antes de colocar SL SHORT
+        old_sl_long = get_sl_broker_order_id(symbol, "LONG", user_id)
+
+        if old_sl_long:
+
+            logger.info(
+                f"🗑️ [{robot}] Cancelando SL LONG zombie "
+                f"antes de ENTRY_SHORT {symbol} orderId={old_sl_long}"
+            )
+
+            cancel_order(
+                symbol=symbol,
+                order_id=old_sl_long,
+                robot=robot
+            )
+
+            set_sl_broker_order_id(
+                symbol,
+                "LONG",
+                None,
+                user_id
+            )     
         _send_sl_broker(symbol, "SHORT", qty, payload.get("sl_broker", "0"), robot, user_id)
         logger.info(f"✅ ENTRY_SHORT ejecutado y state actualizado [{robot}]")
     else:
