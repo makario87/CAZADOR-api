@@ -120,3 +120,16 @@
 ### Prueba multi-activo PowerShell colgada
 - Causa: segundo Invoke-RestMethod bloqueado esperando respuesta del primero
 - Fix: dos terminales independientes en paralelo
+
+### Señales expiradas con delay — sesión 10
+
+- Se observan señales expiradas con ~10-15s delay tras operaciones pesadas
+- Causa probable: Render free tier CPU compartida
+- Con Render de pago desaparece
+- Solución definitiva: socket/realtime
+- Parche temporal: subir SIGNAL_EXPIRY_SECONDS a 20 en Render
+
+### BingX demo — cierre de sesión web espontáneo — sesión 10
+
+- BingX demo cierra sesión web por timeout UI — no afecta API ni middleware
+- Los logs y el reconciler son la fuente de verdad, no la UI
