@@ -582,6 +582,29 @@ def _giro_long(symbol, price, robot, payload, user_id):
             }
 
     time.sleep(GIRO_BUFFER_SECONDS)
+    # Cancelar SL SHORT zombie antes de abrir LONG
+
+    old_sl_short = get_sl_broker_order_id(symbol, "SHORT", user_id)
+
+    if old_sl_short:
+
+        logger.info(
+            f"🗑️ [{robot}] Cancelando SL SHORT zombie "
+            f"antes de GIRO_LONG {symbol} orderId={old_sl_short}"
+        )
+
+        cancel_order(
+            symbol=symbol,
+            order_id=old_sl_short,
+            robot=robot
+        )
+
+        set_sl_broker_order_id(
+            symbol,
+            "SHORT",
+            None,
+            user_id
+        )        
 
     qty = _calculate_qty(symbol, price, robot)
     if qty <= 0:
@@ -665,7 +688,29 @@ def _giro_short(symbol, price, robot, payload, user_id):
             }
 
     time.sleep(GIRO_BUFFER_SECONDS)
+    # Cancelar SL LONG zombie antes de abrir SHORT
 
+    old_sl_long = get_sl_broker_order_id(symbol, "LONG", user_id)
+
+    if old_sl_long:
+
+        logger.info(
+            f"🗑️ [{robot}] Cancelando SL LONG zombie "
+            f"antes de GIRO_SHORT {symbol} orderId={old_sl_long}"
+        )
+
+        cancel_order(
+            symbol=symbol,
+            order_id=old_sl_long,
+            robot=robot
+        )
+
+        set_sl_broker_order_id(
+            symbol,
+            "LONG",
+            None,
+            user_id
+        )
     qty = _calculate_qty(symbol, price, robot)
     if qty <= 0:
         return {"status": "error", "reason": "qty_calculation_failed"}
