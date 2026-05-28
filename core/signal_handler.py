@@ -26,6 +26,7 @@ from data.state import (
     set_sl_broker_order_id,
     get_pyramid,
     reset_pyramid,
+    get_position,
 )
 from core.emergency import trigger_emergency
 from config.settings import (
@@ -294,12 +295,35 @@ def _entry_long(symbol, price, robot, payload, user_id):
         pyramid_count = get_pyramid(symbol, "LONG", user_id)
     
     if pyramid_count >= PYRAMID_MAX_DEFAULT:
-    
+
         logger.warning(
             f"⛔ ENTRY_LONG bloqueada — pirámide llena: "
             f"{pyramid_count}/{PYRAMID_MAX_DEFAULT} "
             f"[{robot}] [{user_id}]"
         )
+    
+        # ── Actualizar SL aunque entrada bloqueada ──────────
+        # TV sigue calculando sl_broker correcto en cada señal
+        # Si vamos LONG y la señal es LONG → refrescar SL
+    
+        sl_broker = payload.get("sl_broker", "0")
+    
+        if sl_broker and float(sl_broker) > 0:
+    
+            pos = get_position(symbol, user_id)
+    
+            if pos.get("long"):
+    
+                _send_sl_broker(
+                    symbol,
+                    "LONG",
+                    pos.get("entry_qty_long") or 0,
+                    sl_broker,
+                    robot,
+                    user_id
+                )
+    
+        # ────────────────────────────────────────────────────
     
         return {
             "status":  "rejected",
@@ -378,12 +402,33 @@ def _entry_short(symbol, price, robot, payload, user_id):
         pyramid_count = get_pyramid(symbol, "SHORT", user_id)
     
     if pyramid_count >= PYRAMID_MAX_DEFAULT:
-    
+
         logger.warning(
             f"⛔ ENTRY_SHORT bloqueada — pirámide llena: "
             f"{pyramid_count}/{PYRAMID_MAX_DEFAULT} "
             f"[{robot}] [{user_id}]"
         )
+    
+        # ── Actualizar SL aunque entrada bloqueada ──────────
+    
+        sl_broker = payload.get("sl_broker", "0")
+    
+        if sl_broker and float(sl_broker) > 0:
+    
+            pos = get_position(symbol, user_id)
+    
+            if pos.get("short"):
+    
+                _send_sl_broker(
+                    symbol,
+                    "SHORT",
+                    pos.get("entry_qty_short") or 0,
+                    sl_broker,
+                    robot,
+                    user_id
+                )
+    
+        # ────────────────────────────────────────────────────
     
         return {
             "status":  "rejected",
@@ -391,7 +436,7 @@ def _entry_short(symbol, price, robot, payload, user_id):
             "current": pyramid_count,
             "max":     PYRAMID_MAX_DEFAULT
         }
-    
+        
     # ────────────────────────────────────────────────────────
     qty = _calculate_qty(symbol, price, robot)
 
