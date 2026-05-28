@@ -276,6 +276,61 @@ def get_order_history(symbol: str, limit: int = 20) -> list:
         )
         return [] 
 
+def has_open_position(symbol: str, position_side: str) -> int:
+    """
+    Detecta si existe posición real abierta en BingX para un símbolo y lado.
+    position_side: LONG | SHORT
+
+    Retorna:
+       1  → hay posición abierta en ese lado
+       0  → no hay posición abierta
+      -1  → error de conexión (tratar como fail seguro)
+
+    Nota: BingX Hedge Mode acumula qty en una sola posición por lado.
+    El conteo lógico de entradas de pirámide vive en state interno Python.
+    Esta función solo confirma existencia real — no cuenta entradas.
+    """
+
+    data = get_positions(symbol)
+
+    if data.get("code") != 0:
+
+        logger.error(
+            f"❌ has_open_position — error consultando BingX "
+            f"{normalize_symbol(symbol)} {position_side}: "
+            f"code={data.get('code')} msg={data.get('msg')}"
+        )
+
+        return -1
+
+    positions = data.get("data") or []
+
+    for p in positions:
+
+        if (
+            p.get("positionSide") == position_side
+            and p.get("symbol") == normalize_symbol(symbol)
+        ):
+
+            amt = abs(float(p.get("positionAmt", 0)))
+
+            if amt > 0:
+
+                logger.info(
+                    f"📊 has_open_position — "
+                    f"{normalize_symbol(symbol)} {position_side}: "
+                    f"posición abierta (amt={amt})"
+                )
+
+                return 1
+
+    logger.info(
+        f"📊 has_open_position — "
+        f"{normalize_symbol(symbol)} {position_side}: sin posición"
+    )
+
+    return 0
+
 
 # ============================================================
 # 🚀 ÓRDENES
