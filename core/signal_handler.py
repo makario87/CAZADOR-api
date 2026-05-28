@@ -11,7 +11,8 @@ from brokers.bingx import (
     place_stop_order,
     cancel_order,
     close_all_positions,
-    get_balance
+    get_balance,
+    has_open_position
 )
 from data.state import (
     get_state,
@@ -22,7 +23,9 @@ from data.state import (
     update_bar_time,
     get_bar_time,
     get_sl_broker_order_id,
-    set_sl_broker_order_id
+    set_sl_broker_order_id,
+    get_pyramid,
+    reset_pyramid,
 )
 from core.emergency import trigger_emergency
 from config.settings import (
@@ -201,21 +204,7 @@ def handle_signal(payload: dict) -> dict:
 
     # ── Control pirámide + anti-duplicados ───────────────────
     if signal in ("ENTRY_LONG", "ENTRY_SHORT"):
-        pyramid_current = int(payload.get("pyramid_current", 0))
-        pyramid_max     = int(payload.get("pyramid_max", PYRAMID_MAX_DEFAULT))
-
-        if pyramid_current > pyramid_max:
-            logger.warning(
-                f"⛔ {signal} rechazada — pirámide llena: "
-                f"{pyramid_current}/{pyramid_max} [{robot}]"
-            )
-            return {
-                "status":  "rejected",
-                "reason":  "pyramid_full",
-                "current": pyramid_current,
-                "max":     pyramid_max
-            }
-
+        
         signal_time = payload.get("time", "")
         signal_tf   = payload.get("tf", "")
 
@@ -277,6 +266,49 @@ def handle_signal(payload: dict) -> dict:
 # ============================================================
 
 def _entry_long(symbol, price, robot, payload, user_id):
+    # ── Control pirámide — BingX real + state interno ──────
+
+    position_real = has_open_position(symbol, "LONG")
+    
+    if position_real == -1:
+    
+        logger.error(
+            f"⛔ ENTRY_LONG bloqueada — error consultando BingX "
+            f"[{robot}] [{user_id}]"
+        )
+    
+        return {
+            "status": "rejected",
+            "reason": "bingx_connection_error"
+        }
+    
+    if position_real == 0:
+    
+        # BingX no tiene posición → reset contador si había desync
+        reset_pyramid(symbol, "LONG", user_id)
+        pyramid_count = 0
+    
+    else:
+    
+        # BingX tiene posición → usar contador interno
+        pyramid_count = get_pyramid(symbol, "LONG", user_id)
+    
+    if pyramid_count >= PYRAMID_MAX_DEFAULT:
+    
+        logger.warning(
+            f"⛔ ENTRY_LONG bloqueada — pirámide llena: "
+            f"{pyramid_count}/{PYRAMID_MAX_DEFAULT} "
+            f"[{robot}] [{user_id}]"
+        )
+    
+        return {
+            "status":  "rejected",
+            "reason":  "pyramid_full",
+            "current": pyramid_count,
+            "max":     PYRAMID_MAX_DEFAULT
+        }
+    
+    # ────────────────────────────────────────────────────────
     qty = _calculate_qty(symbol, price, robot)
 
     if qty <= 0:
@@ -318,6 +350,49 @@ def _entry_long(symbol, price, robot, payload, user_id):
 
 
 def _entry_short(symbol, price, robot, payload, user_id):
+    # ── Control pirámide — BingX real + state interno ──────
+
+    position_real = has_open_position(symbol, "SHORT")
+    
+    if position_real == -1:
+    
+        logger.error(
+            f"⛔ ENTRY_SHORT bloqueada — error consultando BingX "
+            f"[{robot}] [{user_id}]"
+        )
+    
+        return {
+            "status": "rejected",
+            "reason": "bingx_connection_error"
+        }
+    
+    if position_real == 0:
+    
+        # BingX no tiene posición → reset contador si había desync
+        reset_pyramid(symbol, "SHORT", user_id)
+        pyramid_count = 0
+    
+    else:
+    
+        # BingX tiene posición → usar contador interno
+        pyramid_count = get_pyramid(symbol, "SHORT", user_id)
+    
+    if pyramid_count >= PYRAMID_MAX_DEFAULT:
+    
+        logger.warning(
+            f"⛔ ENTRY_SHORT bloqueada — pirámide llena: "
+            f"{pyramid_count}/{PYRAMID_MAX_DEFAULT} "
+            f"[{robot}] [{user_id}]"
+        )
+    
+        return {
+            "status":  "rejected",
+            "reason":  "pyramid_full",
+            "current": pyramid_count,
+            "max":     PYRAMID_MAX_DEFAULT
+        }
+    
+    # ────────────────────────────────────────────────────────
     qty = _calculate_qty(symbol, price, robot)
 
     if qty <= 0:
