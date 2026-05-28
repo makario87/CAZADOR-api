@@ -172,3 +172,10 @@ Política futura válida: alerta fuerte + bloqueo temporal + revisión obligator
 - Transferencias de fondos entre cuenta principal y subcuenta
 - Límites y restricciones BingX en subcuentas
 
+### Desacoplamiento TV/Python — sesión 10
+
+TV genera señales. Python decide si ejecuta.
+TV no controla riesgo, pirámide ni exposición real.
+Python consulta BingX real para tomar decisiones.
+BingX es la verdad absoluta sobre existencia de posición.
+
