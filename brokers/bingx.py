@@ -557,20 +557,28 @@ def cancel_order(symbol: str, order_id: str, robot: str = "") -> dict:
         code = data.get("code")
 
         if code == 0:
-
+        
             logger.info(
                 f"✅ [{BINGX_ENV.upper()}][{robot}] CANCEL OK — "
                 f"order_id={order_id} {symbol}"
             )
-
+        
+        elif code == 109400:
+        
+            logger.info(
+                f"ℹ️ [{BINGX_ENV.upper()}][{robot}] CANCEL — "
+                f"order_id={order_id} {symbol} ya no existía en BingX "
+                f"(cancelado previamente o ejecutado)"
+            )
+        
         else:
-
+        
             logger.warning(
                 f"⚠️ [{BINGX_ENV.upper()}][{robot}] CANCEL no ejecutado — "
                 f"order_id={order_id} {symbol} "
                 f"code={code} msg={data.get('msg')} "
                 f"(puede que ya ejecutó o no existía)"
-            )
+            )       
 
         return data
 
