@@ -299,7 +299,55 @@ if __name__ == "__main__":
 
     # Cargar estado persistente
     load_state()
-
+    # ── Limpiar SL broker order_ids zombies al arrancar ─────────
+    # Los order_ids guardados en state son de sesiones anteriores.
+    # BingX no los reconoce tras un restart → limpiar para evitar
+    # intentos de cancelar órdenes inexistentes.
+    
+    try:
+    
+        from data.state import (
+            get_all_user_ids,
+            _states,
+            save_state
+        )
+    
+        for uid in get_all_user_ids():
+    
+            st = _states.get(uid, {})
+            positions = st.get("positions", {})
+    
+            for sym, pos in positions.items():
+    
+                if pos.get("sl_broker_order_id_long"):
+    
+                    logger.info(
+                        f"🧹 Limpiando SL LONG zombie al arrancar "
+                        f"[{uid}] {sym} "
+                        f"orderId={pos['sl_broker_order_id_long']}"
+                    )
+    
+                    pos["sl_broker_order_id_long"] = None
+    
+                if pos.get("sl_broker_order_id_short"):
+    
+                    logger.info(
+                        f"🧹 Limpiando SL SHORT zombie al arrancar "
+                        f"[{uid}] {sym} "
+                        f"orderId={pos['sl_broker_order_id_short']}"
+                    )
+    
+                    pos["sl_broker_order_id_short"] = None
+    
+            save_state(uid)
+    
+        logger.info("✅ SL broker order_ids limpiados al arrancar")
+    
+    except Exception as e:
+    
+        logger.error(
+            f"❌ Error limpiando SL zombies al arrancar: {e}"
+        )
     # Inicializar contadores BingX en 0 si no existen
     state = get_state()
     if "bingx_long_count" not in state:
