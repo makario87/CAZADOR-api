@@ -158,3 +158,19 @@ La señal que llega a Python ya identifica exactamente qué SL disparó.
 | BingX rechaza STOP | Solo warning → robot sigue ✅ |
 | Multi-symbol BTC+PENGU | Sin contaminación cruzada ✅ |
 | STOPs acumulados | Ya no ocurre — cancelar→crear ✅ |
+
+
+### SL zombie — regla definitiva — sesión 10
+
+- _entry_long(): cancela SL SHORT zombie antes de colocar SL LONG
+- _entry_short(): cancela SL LONG zombie antes de colocar SL SHORT
+- _giro_long(): cancela SL SHORT zombie antes de abrir LONG
+- _giro_short(): cancela SL LONG zombie antes de abrir SHORT
+- app.py al arrancar: cancela en BingX real todos los SL order_ids guardados en state
+- BingX 109400 (order not exist) es INFO, no WARNING
+
+### Deuda SL — sesión 10
+
+- TV calcula sl_broker incluyendo capas fantasma bloqueadas por Python
+- El precio promedio del SL puede desviarse respecto a la posición real
+- Futuro: Python recalcula SL usando entry_price y entry_qty reales del state
