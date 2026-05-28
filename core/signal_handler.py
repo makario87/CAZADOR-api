@@ -40,6 +40,9 @@ from data.trade_log import log_trade
 
 logger = get_logger(__name__)
 
+# Flag para evitar race condition reconciler durante GIRO
+_giro_in_progress = {}  # { user_id: bool }
+
 VALID_SIGNALS = {
     "ENTRY_LONG", "ENTRY_SHORT",
     "CLOSE_LONG", "CLOSE_SHORT",
@@ -589,221 +592,228 @@ def _close_short(symbol, price, robot, payload, user_id):
     return {"status": "ok" if code == 0 else "error",
             "action": "CLOSE_SHORT", "result": result}
 
-
 # ============================================================
 # 🔄 GIROS
 # ============================================================
 
 def _giro_long(symbol, price, robot, payload, user_id):
     logger.info(f"🔄 GIRO_LONG {symbol} [{robot}]")
+    _giro_in_progress[user_id] = True
+    try:
 
-    result_close = close_all_positions(symbol, "SHORT", robot=robot)
-    code_close   = result_close.get("code", -1)
+        result_close = close_all_positions(symbol, "SHORT", robot=robot)
+        code_close   = result_close.get("code", -1)
+    
+        if code_close != 0:
+            if result_close.get("msg") == "no_open_position":
+                logger.info(
+                    f"ℹ️ GIRO_LONG — no había SHORT, "
+                    f"abriendo LONG directamente [{robot}]"
+                )
+            else:
+                logger.error(
+                    f"❌ GIRO_LONG cierre SHORT falló — "
+                    f"abortando. code={code_close} [{robot}]"
+                )
+                trigger_emergency(
+                    f"GIRO_LONG no cerró SHORT: "
+                    f"code={code_close} msg={result_close.get('msg')}"
+                )
+                log_trade(
+                    signal="GIRO_LONG_CLOSE", symbol=symbol, qty=0,
+                    price=price, result=result_close,
+                    user_id=user_id, robot=robot, demo=SIMULATION_MODE
+                )
+                return {
+                    "status": "error", "action": "GIRO_LONG",
+                    "reason": "close_failed", "close": result_close
+                }
 
-    if code_close != 0:
-        if result_close.get("msg") == "no_open_position":
+        time.sleep(GIRO_BUFFER_SECONDS)
+        # Cancelar SL SHORT zombie antes de abrir LONG
+    
+        old_sl_short = get_sl_broker_order_id(symbol, "SHORT", user_id)
+    
+        if old_sl_short:
+    
             logger.info(
-                f"ℹ️ GIRO_LONG — no había SHORT, "
-                f"abriendo LONG directamente [{robot}]"
+                f"🗑️ [{robot}] Cancelando SL SHORT zombie "
+                f"antes de GIRO_LONG {symbol} orderId={old_sl_short}"
             )
+    
+            cancel_order(
+                symbol=symbol,
+                order_id=old_sl_short,
+                robot=robot
+            )
+    
+            set_sl_broker_order_id(
+                symbol,
+                "SHORT",
+                None,
+                user_id
+            )        
+    
+        qty = _calculate_qty(symbol, price, robot)
+        if qty <= 0:
+            return {"status": "error", "reason": "qty_calculation_failed"}
+    
+        result_open = place_order(
+            symbol, "BUY", qty, "LONG",
+            price_signal=float(price), robot=robot
+        )
+    
+        log_trade(
+            signal="GIRO_LONG_CLOSE", symbol=symbol, qty=0,
+            price=price, result=result_close,
+            user_id=user_id, robot=robot, demo=SIMULATION_MODE
+        )
+        log_trade(
+            signal="GIRO_LONG_OPEN", symbol=symbol, qty=qty,
+            price=price, result=result_open,
+            user_id=user_id, robot=robot, demo=SIMULATION_MODE
+        )
+    
+        code_open = result_open.get("code", -1)
+    
+        if code_open == 0:
+            update_state({"last_signal": "GIRO_LONG", "symbol": symbol}, user_id)
+            update_position(symbol, has_long=True, has_short=False, user_id=user_id)
+            price_exec = result_open.get("_meta", {}).get("price_executed") or float(price)
+            update_entry(symbol, "LONG", price_exec, qty, user_id)
+            increment_pyramid(symbol, "LONG", user_id)
+            update_bar_time(symbol, payload.get("time", ""), payload.get("tf", ""), user_id)
+            _send_sl_broker(symbol, "LONG", qty, payload.get("sl_broker", "0"), robot, user_id)
+            logger.info(f"✅ GIRO_LONG completo [{robot}]")
         else:
             logger.error(
-                f"❌ GIRO_LONG cierre SHORT falló — "
-                f"abortando. code={code_close} [{robot}]"
+                f"❌ GIRO_LONG apertura LONG falló — "
+                f"SHORT cerrado pero LONG no abierto. "
+                f"code={code_open} [{robot}]"
             )
             trigger_emergency(
-                f"GIRO_LONG no cerró SHORT: "
-                f"code={code_close} msg={result_close.get('msg')}"
+                f"GIRO_LONG cerró SHORT pero no abrió LONG: "
+                f"code={code_open} msg={result_open.get('msg')}"
             )
-            log_trade(
-                signal="GIRO_LONG_CLOSE", symbol=symbol, qty=0,
-                price=price, result=result_close,
-                user_id=user_id, robot=robot, demo=SIMULATION_MODE
-            )
-            return {
-                "status": "error", "action": "GIRO_LONG",
-                "reason": "close_failed", "close": result_close
-            }
+    
+        return {
+            "status": "ok" if code_open == 0 else "error",
+            "action": "GIRO_LONG",
+            "close": result_close,
+            "open":  result_open
+        }
+    finally:
 
-    time.sleep(GIRO_BUFFER_SECONDS)
-    # Cancelar SL SHORT zombie antes de abrir LONG
-
-    old_sl_short = get_sl_broker_order_id(symbol, "SHORT", user_id)
-
-    if old_sl_short:
-
-        logger.info(
-            f"🗑️ [{robot}] Cancelando SL SHORT zombie "
-            f"antes de GIRO_LONG {symbol} orderId={old_sl_short}"
-        )
-
-        cancel_order(
-            symbol=symbol,
-            order_id=old_sl_short,
-            robot=robot
-        )
-
-        set_sl_broker_order_id(
-            symbol,
-            "SHORT",
-            None,
-            user_id
-        )        
-
-    qty = _calculate_qty(symbol, price, robot)
-    if qty <= 0:
-        return {"status": "error", "reason": "qty_calculation_failed"}
-
-    result_open = place_order(
-        symbol, "BUY", qty, "LONG",
-        price_signal=float(price), robot=robot
-    )
-
-    log_trade(
-        signal="GIRO_LONG_CLOSE", symbol=symbol, qty=0,
-        price=price, result=result_close,
-        user_id=user_id, robot=robot, demo=SIMULATION_MODE
-    )
-    log_trade(
-        signal="GIRO_LONG_OPEN", symbol=symbol, qty=qty,
-        price=price, result=result_open,
-        user_id=user_id, robot=robot, demo=SIMULATION_MODE
-    )
-
-    code_open = result_open.get("code", -1)
-
-    if code_open == 0:
-        update_state({"last_signal": "GIRO_LONG", "symbol": symbol}, user_id)
-        update_position(symbol, has_long=True, has_short=False, user_id=user_id)
-        price_exec = result_open.get("_meta", {}).get("price_executed") or float(price)
-        update_entry(symbol, "LONG", price_exec, qty, user_id)
-        increment_pyramid(symbol, "LONG", user_id)
-        update_bar_time(symbol, payload.get("time", ""), payload.get("tf", ""), user_id)
-        _send_sl_broker(symbol, "LONG", qty, payload.get("sl_broker", "0"), robot, user_id)
-        logger.info(f"✅ GIRO_LONG completo [{robot}]")
-    else:
-        logger.error(
-            f"❌ GIRO_LONG apertura LONG falló — "
-            f"SHORT cerrado pero LONG no abierto. "
-            f"code={code_open} [{robot}]"
-        )
-        trigger_emergency(
-            f"GIRO_LONG cerró SHORT pero no abrió LONG: "
-            f"code={code_open} msg={result_open.get('msg')}"
-        )
-
-    return {
-        "status": "ok" if code_open == 0 else "error",
-        "action": "GIRO_LONG",
-        "close": result_close,
-        "open":  result_open
-    }
+        _giro_in_progress[user_id] = False
 
 
 def _giro_short(symbol, price, robot, payload, user_id):
     logger.info(f"🔄 GIRO_SHORT {symbol} [{robot}]")
-
-    result_close = close_all_positions(symbol, "LONG", robot=robot)
-    code_close   = result_close.get("code", -1)
-
-    if code_close != 0:
-        if result_close.get("msg") == "no_open_position":
+    _giro_in_progress[user_id] = True
+    try:
+        result_close = close_all_positions(symbol, "LONG", robot=robot)
+        code_close   = result_close.get("code", -1)
+   
+        if code_close != 0:
+            if result_close.get("msg") == "no_open_position":
+                logger.info(
+                    f"ℹ️ GIRO_SHORT — no había LONG, "
+                    f"abriendo SHORT directamente [{robot}]"
+                )
+            else:
+                logger.error(
+                    f"❌ GIRO_SHORT cierre LONG falló — "
+                    f"abortando. code={code_close} [{robot}]"
+                )
+                trigger_emergency(
+                    f"GIRO_SHORT no cerró LONG: "
+                    f"code={code_close} msg={result_close.get('msg')}"
+                )
+                log_trade(
+                    signal="GIRO_SHORT_CLOSE", symbol=symbol, qty=0,
+                    price=price, result=result_close,
+                    user_id=user_id, robot=robot, demo=SIMULATION_MODE
+                )
+                return {
+                    "status": "error", "action": "GIRO_SHORT",
+                    "reason": "close_failed", "close": result_close
+                }
+    
+        time.sleep(GIRO_BUFFER_SECONDS)
+        # Cancelar SL LONG zombie antes de abrir SHORT
+    
+        old_sl_long = get_sl_broker_order_id(symbol, "LONG", user_id)
+    
+        if old_sl_long:
+    
             logger.info(
-                f"ℹ️ GIRO_SHORT — no había LONG, "
-                f"abriendo SHORT directamente [{robot}]"
+                f"🗑️ [{robot}] Cancelando SL LONG zombie "
+                f"antes de GIRO_SHORT {symbol} orderId={old_sl_long}"
             )
+    
+            cancel_order(
+                symbol=symbol,
+                order_id=old_sl_long,
+                robot=robot
+            )
+    
+            set_sl_broker_order_id(
+                symbol,
+                "LONG",
+                None,
+                user_id
+            )
+        qty = _calculate_qty(symbol, price, robot)
+        if qty <= 0:
+            return {"status": "error", "reason": "qty_calculation_failed"}
+    
+        result_open = place_order(
+            symbol, "SELL", qty, "SHORT",
+            price_signal=float(price), robot=robot
+        )
+    
+        log_trade(
+            signal="GIRO_SHORT_CLOSE", symbol=symbol, qty=0,
+            price=price, result=result_close,
+            user_id=user_id, robot=robot, demo=SIMULATION_MODE
+        )
+        log_trade(
+            signal="GIRO_SHORT_OPEN", symbol=symbol, qty=qty,
+            price=price, result=result_open,
+            user_id=user_id, robot=robot, demo=SIMULATION_MODE
+        )
+    
+        code_open = result_open.get("code", -1)
+    
+        if code_open == 0:
+            update_state({"last_signal": "GIRO_SHORT", "symbol": symbol}, user_id)
+            update_position(symbol, has_long=False, has_short=True, user_id=user_id)
+            price_exec = result_open.get("_meta", {}).get("price_executed") or float(price)
+            update_entry(symbol, "SHORT", price_exec, qty, user_id)
+            increment_pyramid(symbol, "SHORT", user_id)
+            update_bar_time(symbol, payload.get("time", ""), payload.get("tf", ""), user_id)
+            _send_sl_broker(symbol, "SHORT", qty, payload.get("sl_broker", "0"), robot, user_id)
+            logger.info(f"✅ GIRO_SHORT completo [{robot}]")
         else:
             logger.error(
-                f"❌ GIRO_SHORT cierre LONG falló — "
-                f"abortando. code={code_close} [{robot}]"
+                f"❌ GIRO_SHORT apertura SHORT falló — "
+                f"LONG cerrado pero SHORT no abierto. "
+                f"code={code_open} [{robot}]"
             )
             trigger_emergency(
-                f"GIRO_SHORT no cerró LONG: "
-                f"code={code_close} msg={result_close.get('msg')}"
+                f"GIRO_SHORT cerró LONG pero no abrió SHORT: "
+                f"code={code_open} msg={result_open.get('msg')}"
             )
-            log_trade(
-                signal="GIRO_SHORT_CLOSE", symbol=symbol, qty=0,
-                price=price, result=result_close,
-                user_id=user_id, robot=robot, demo=SIMULATION_MODE
-            )
-            return {
-                "status": "error", "action": "GIRO_SHORT",
-                "reason": "close_failed", "close": result_close
-            }
-
-    time.sleep(GIRO_BUFFER_SECONDS)
-    # Cancelar SL LONG zombie antes de abrir SHORT
-
-    old_sl_long = get_sl_broker_order_id(symbol, "LONG", user_id)
-
-    if old_sl_long:
-
-        logger.info(
-            f"🗑️ [{robot}] Cancelando SL LONG zombie "
-            f"antes de GIRO_SHORT {symbol} orderId={old_sl_long}"
-        )
-
-        cancel_order(
-            symbol=symbol,
-            order_id=old_sl_long,
-            robot=robot
-        )
-
-        set_sl_broker_order_id(
-            symbol,
-            "LONG",
-            None,
-            user_id
-        )
-    qty = _calculate_qty(symbol, price, robot)
-    if qty <= 0:
-        return {"status": "error", "reason": "qty_calculation_failed"}
-
-    result_open = place_order(
-        symbol, "SELL", qty, "SHORT",
-        price_signal=float(price), robot=robot
-    )
-
-    log_trade(
-        signal="GIRO_SHORT_CLOSE", symbol=symbol, qty=0,
-        price=price, result=result_close,
-        user_id=user_id, robot=robot, demo=SIMULATION_MODE
-    )
-    log_trade(
-        signal="GIRO_SHORT_OPEN", symbol=symbol, qty=qty,
-        price=price, result=result_open,
-        user_id=user_id, robot=robot, demo=SIMULATION_MODE
-    )
-
-    code_open = result_open.get("code", -1)
-
-    if code_open == 0:
-        update_state({"last_signal": "GIRO_SHORT", "symbol": symbol}, user_id)
-        update_position(symbol, has_long=False, has_short=True, user_id=user_id)
-        price_exec = result_open.get("_meta", {}).get("price_executed") or float(price)
-        update_entry(symbol, "SHORT", price_exec, qty, user_id)
-        increment_pyramid(symbol, "SHORT", user_id)
-        update_bar_time(symbol, payload.get("time", ""), payload.get("tf", ""), user_id)
-        _send_sl_broker(symbol, "SHORT", qty, payload.get("sl_broker", "0"), robot, user_id)
-        logger.info(f"✅ GIRO_SHORT completo [{robot}]")
-    else:
-        logger.error(
-            f"❌ GIRO_SHORT apertura SHORT falló — "
-            f"LONG cerrado pero SHORT no abierto. "
-            f"code={code_open} [{robot}]"
-        )
-        trigger_emergency(
-            f"GIRO_SHORT cerró LONG pero no abrió SHORT: "
-            f"code={code_open} msg={result_open.get('msg')}"
-        )
-
-    return {
-        "status": "ok" if code_open == 0 else "error",
-        "action": "GIRO_SHORT",
-        "close": result_close,
-        "open":  result_open
-    }
-
+    
+        return {
+            "status": "ok" if code_open == 0 else "error",
+            "action": "GIRO_SHORT",
+            "close": result_close,
+            "open":  result_open
+        }
+    finally:
+    
+        _giro_in_progress[user_id] = False
 
 # ============================================================
 # 🛑 STOP LOSS
