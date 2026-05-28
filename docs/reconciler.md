@@ -130,3 +130,12 @@ Opciones a evaluar (no implementar ahora):
 - Validación extra antes de nueva entrada
 
 Decisión: definir política antes de pasar a live con capital real.
+
+### Race condition reconciler/GIRO — sesión 10
+
+- Problema: reconciler se cuela en el gap entre cierre y apertura del GIRO
+- Sin fix: ve BingX vacío, interpreta cierre externo, limpia state → posición huérfana
+- Fix: _giro_in_progress dict por user_id en signal_handler.py
+- _giro_long() y _giro_short() envueltos en try/finally con el flag
+- reconciler._check_state(): pausa si any(_giro_in_progress.values())
+- El flag se libera siempre en finally aunque haya excepción
