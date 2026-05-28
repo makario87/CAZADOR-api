@@ -15,6 +15,7 @@ from core.emergency import trigger_emergency
 from data.state import get_state, update_position, record_reconciler, get_our_order_ids, get_all_positions
 from config.settings import RECONCILE_INTERVAL, SIMULATION_MODE
 from logs.logger import get_logger
+from core.signal_handler import _giro_in_progress
 
 logger = get_logger(__name__)
 
@@ -60,6 +61,13 @@ def _reconcile_loop():
 # 🔍 CHECK REAL
 # ============================================================
 def _check_state():
+    if any(_giro_in_progress.values()):
+    
+            logger.info(
+                "⏸️ Reconciler pausado — GIRO en progreso"
+            )
+    
+            return        
     record_reconciler()
 
     bingx_data = get_positions()
