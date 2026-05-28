@@ -145,3 +145,17 @@ distLongOK = strategy.position_size <= 0 or
 ```
 
 Evita entradas demasiado juntas. Configurable desde Pine.
+
+### Pirámide por usuario (#12e) — sesión 10
+
+- Python ignora pyramid_current y pyramid_max del payload de TV
+- has_open_position() consulta BingX real — retorna 1/0/-1
+- Si BingX dice 0 → reset_pyramid() → contador interno a 0
+- Si BingX dice 1 → usar contador interno Python
+- Si pyramid_count >= PYRAMID_MAX_DEFAULT → BLOQUEADO
+- Si bloqueado: SL broker se refresca igualmente
+- GIRO nunca bloqueado por pirámide
+- Ahora: PYRAMID_MAX_DEFAULT en variable de entorno Render
+- Futuro: subscriptions.pyramid_max por usuario+robot (cuando llegue panel)
+- BingX Hedge Mode: NO cuenta entradas individuales — acumula qty en una sola posición
+- El contador lógico de entradas vive únicamente en Python (state interno)
