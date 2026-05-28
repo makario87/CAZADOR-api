@@ -23,7 +23,7 @@ from data.trade_log import (
     clear_trades,
 )
 from reports.csv_exporter import export_csv
-from brokers.bingx import get_balance, get_positions
+from brokers.bingx import get_balance, get_positions, cancel_order
 from logs.logger import get_logger
 from core.queue_manager import queue_size
 from core.reconciler import is_alive as reconciler_alive
@@ -299,55 +299,67 @@ if __name__ == "__main__":
 
     # Cargar estado persistente
     load_state()
+
     # ── Limpiar SL broker order_ids zombies al arrancar ─────────
-    # Los order_ids guardados en state son de sesiones anteriores.
-    # BingX no los reconoce tras un restart → limpiar para evitar
-    # intentos de cancelar órdenes inexistentes.
-    
     try:
-    
-        from data.state import (
-            get_all_user_ids,
-            _states,
-            save_state
-        )
+        from data.state import get_all_user_ids, _states, save_state
     
         for uid in get_all_user_ids():
-    
             st = _states.get(uid, {})
             positions = st.get("positions", {})
     
             for sym, pos in positions.items():
-    
-                if pos.get("sl_broker_order_id_long"):
-    
-                    logger.info(
-                        f"🧹 Limpiando SL LONG zombie al arrancar "
-                        f"[{uid}] {sym} "
-                        f"orderId={pos['sl_broker_order_id_long']}"
-                    )
-    
-                    pos["sl_broker_order_id_long"] = None
-    
-                if pos.get("sl_broker_order_id_short"):
+                for side_key, side_name in [
+                    ("sl_broker_order_id_long",  "LONG"),
+                    ("sl_broker_order_id_short", "SHORT"),
+                ]:
+                    order_id = pos.get(side_key)
+                    if not order_id:
+                        continue
     
                     logger.info(
-                        f"🧹 Limpiando SL SHORT zombie al arrancar "
-                        f"[{uid}] {sym} "
-                        f"orderId={pos['sl_broker_order_id_short']}"
+                        f"🧹 [{uid}] Cancelando SL {side_name} zombie "
+                        f"al arrancar {sym} orderId={order_id}"
                     )
     
-                    pos["sl_broker_order_id_short"] = None
+                    try:
+                        cancel_result = cancel_order(
+                            symbol=sym,
+                            order_id=str(order_id),
+                            robot="STARTUP"
+                        )
+                        code = cancel_result.get("code")
+                        if code == 0:
+                            logger.info(
+                                f"✅ [{uid}] SL {side_name} zombie cancelado "
+                                f"en BingX {sym}"
+                            )
+                        elif code == 109400:
+                            logger.info(
+                                f"ℹ️ [{uid}] SL {side_name} {sym} ya no existía "
+                                f"en BingX — limpiando state"
+                            )
+                        else:
+                            logger.warning(
+                                f"⚠️ [{uid}] Cancel SL {side_name} {sym} "
+                                f"code={code} — limpiando state igualmente"
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            f"⚠️ [{uid}] Error cancelando SL {side_name} "
+                            f"{sym}: {e} — limpiando state igualmente"
+                        )
+    
+                    pos[side_key] = None
     
             save_state(uid)
     
         logger.info("✅ SL broker order_ids limpiados al arrancar")
     
     except Exception as e:
+        logger.error(f"❌ Error limpiando SL zombies al arrancar: {e}")
+
     
-        logger.error(
-            f"❌ Error limpiando SL zombies al arrancar: {e}"
-        )
     # Inicializar contadores BingX en 0 si no existen
     state = get_state()
     if "bingx_long_count" not in state:
