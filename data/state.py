@@ -317,6 +317,57 @@ def increment_pyramid(symbol: str, side: str, user_id: str = DEFAULT_USER):
     save_state(user_id)
     logger.info(f"📈 Pirámide [{user_id}] {symbol} {side}: {count}")
 
+def get_pyramid(symbol: str, side: str, user_id: str = DEFAULT_USER) -> int:
+    """
+    Devuelve el contador actual de entradas de pirámide para un símbolo y lado.
+    side: LONG | SHORT
+    Usado por signal_handler para control de pirámide por usuario.
+    """
+    with _lock:
+        pos = _get_pos(symbol, user_id)
+        if side == "LONG":
+            return pos.get("pyramid_long_count", 0)
+        elif side == "SHORT":
+            return pos.get("pyramid_short_count", 0)
+        return 0
+
+
+def reset_pyramid(symbol: str, side: str, user_id: str = DEFAULT_USER):
+    """
+    Resetea el contador de pirámide para un símbolo y lado.
+    Se llama cuando BingX confirma que no hay posición abierta
+    pero el state interno tiene contador > 0 — indica desync o restart.
+    side: LONG | SHORT
+    """
+    with _lock:
+        st  = _get_user_state(user_id)
+        pos = _get_pos(symbol, user_id)
+
+        if side == "LONG":
+
+            if pos.get("pyramid_long_count", 0) > 0:
+                logger.warning(
+                    f"⚠️ reset_pyramid [{user_id}] {symbol} LONG — "
+                    f"contador era {pos['pyramid_long_count']}, "
+                    f"BingX no tiene posición → reset"
+                )
+
+            pos["pyramid_long_count"] = 0
+            st["pyramid_long_count"]  = 0
+
+        elif side == "SHORT":
+
+            if pos.get("pyramid_short_count", 0) > 0:
+                logger.warning(
+                    f"⚠️ reset_pyramid [{user_id}] {symbol} SHORT — "
+                    f"contador era {pos['pyramid_short_count']}, "
+                    f"BingX no tiene posición → reset"
+                )
+
+            pos["pyramid_short_count"] = 0
+            st["pyramid_short_count"]  = 0
+
+    save_state(user_id)
 
 def update_bar_time(symbol: str, bar_time: str, bar_tf: str,
                     user_id: str = DEFAULT_USER):
