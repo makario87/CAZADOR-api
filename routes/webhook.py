@@ -16,14 +16,22 @@ webhook_bp = Blueprint("webhook", __name__)
 @webhook_bp.route("/webhook", methods=["POST"])
 def receive_signal():
 
-    # 🔍 DEBUG — log raw completo
+    # 🔍 DEBUG — log raw completo (token enmascarado)
+    import re
+    
     raw_body = request.get_data(as_text=True)
-    logger.info(f"📦 RAW BODY: {raw_body}")
+    safe_raw = re.sub(r'"token"\s*:\s*"[^"]*"', '"token": "MASKED"', raw_body)
+    
+    logger.info(f"📦 RAW BODY: {safe_raw}")
     logger.info(f"📋 HEADERS: {dict(request.headers)}")
-
+    
     # Parsear JSON
     payload = request.get_json(silent=True, force=True)
-    logger.info(f"🔍 JSON PARSED: {payload}")
+    
+    # Log payload con token enmascarado
+    if payload:
+        safe_payload = {**payload, "token": "MASKED"} if "token" in payload else payload
+        logger.info(f"🔍 JSON PARSED: {safe_payload}")    
 
     if not payload:
         logger.warning("⚠️ No se pudo parsear JSON")
