@@ -185,3 +185,196 @@ def panel_alerts():
         return jsonify({"error": str(e)}), 500
 
     return jsonify({"alerts": alerts}), 200
+
+
+# ─── GET /panel/users/summary ────────────────────────────────────────────────
+@panel_bp.route("/panel/users/summary", methods=["GET"])
+def panel_users_summary():
+    """Resumen numérico de usuarios para el panel."""
+    if not _auth(request):
+        return _fail_auth()
+    try:
+        return jsonify(get_users_summary()), 200
+    except Exception as e:
+        logger.error(f"❌ panel/users/summary error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ─── GET /panel/users/<id> ───────────────────────────────────────────────────
+@panel_bp.route("/panel/users/<int:user_id>", methods=["GET"])
+def panel_user_detail(user_id):
+    """Detalle de un usuario concreto."""
+    if not _auth(request):
+        return _fail_auth()
+    try:
+        user = get_user(user_id)
+        if not user:
+            return jsonify({"error": "Usuario no encontrado"}), 404
+        user["has_api_key"] = has_active_api_key(user_id)
+        return jsonify(user), 200
+    except Exception as e:
+        logger.error(f"❌ panel/users/{user_id} error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ─── POST /panel/users ───────────────────────────────────────────────────────
+@panel_bp.route("/panel/users", methods=["POST"])
+def panel_create_user():
+    """Crea un usuario nuevo."""
+    if not _auth(request):
+        return _fail_auth()
+    try:
+        data = request.get_json(force=True) or {}
+        name  = data.get("name", "").strip()
+        if not name:
+            return jsonify({"error": "name es obligatorio"}), 400
+
+        user_id = create_user(
+            name        = name,
+            email       = data.get("email"),
+            telegram_id = data.get("telegram_id"),
+            plan        = data.get("plan", "free"),
+            env         = data.get("env", "demo")
+        )
+        return jsonify({"ok": True, "user_id": user_id}), 201
+
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 409   # email duplicado
+    except Exception as e:
+        logger.error(f"❌ panel/users POST error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ─── PUT /panel/users/<id> ───────────────────────────────────────────────────
+@panel_bp.route("/panel/users/<int:user_id>", methods=["PUT"])
+def panel_update_user(user_id):
+    """Actualiza campos de un usuario."""
+    if not _auth(request):
+        return _fail_auth()
+    try:
+        data = request.get_json(force=True) or {}
+        if not data:
+            return jsonify({"error": "Sin campos para actualizar"}), 400
+
+        ok = update_user(user_id, **data)
+        if not ok:
+            return jsonify({"error": "Usuario no encontrado"}), 404
+        return jsonify({"ok": True}), 200
+
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"❌ panel/users/{user_id} PUT error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ─── DELETE /panel/users/<id> ────────────────────────────────────────────────
+@panel_bp.route("/panel/users/<int:user_id>", methods=["DELETE"])
+def panel_deactivate_user(user_id):
+    """Desactiva un usuario (soft delete)."""
+    if not _auth(request):
+        return _fail_auth()
+    try:
+        ok = deactivate_user(user_id)
+        if not ok:
+            return jsonify({"error": "Usuario no encontrado"}), 404
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        logger.error(f"❌ panel/users/{user_id} DELETE error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ─── GET /panel/users/<id>/apikeys ───────────────────────────────────────────
+@panel_bp.route("/panel/users/<int:user_id>/apikeys", methods=["GET"])
+def panel_list_apikeys(user_id):
+    """Lista API keys de un usuario (sin descifrar)."""
+    if not _auth(request):
+        return _fail_auth()
+    try:
+        if not get_user(user_id):
+            return jsonify({"error": "Usuario no encontrado"}), 404
+        keys = list_api_keys(user_id)
+        return jsonify({"api_keys": keys}), 200
+    except Exception as e:
+        logger.error(f"❌ panel/users/{user_id}/apikeys GET error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ─── POST /panel/users/<id>/apikeys ──────────────────────────────────────────
+@panel_bp.route("/panel/users/<int:user_id>/apikeys", methods=["POST"])
+def panel_add_apikey(user_id):
+    """Añade una API key cifrada a un usuario."""
+    if not _auth(request):
+        return _fail_auth()
+    try:
+        if not get_user(user_id):
+            return jsonify({"error": "Usuario no encontrado"}), 404
+
+        data   = request.get_json(force=True) or {}
+        key    = data.get("key", "").strip()
+        secret = data.get("secret", "").strip()
+
+        if not key or not secret:
+            return jsonify({"error": "key y secret son obligatorios"}), 400
+
+        api_key_id = add_api_key(
+            user_id  = user_id,
+            key      = key,
+            secret   = secret,
+            exchange = data.get("exchange", "bingx"),
+            env      = data.get("env", "demo")
+        )
+        return jsonify({"ok": True, "api_key_id": api_key_id}), 201
+
+    except Exception as e:
+        logger.error(f"❌ panel/users/{user_id}/apikeys POST error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ─── DELETE /panel/users/<id>/apikeys/<key_id> ───────────────────────────────
+@panel_bp.route("/panel/users/<int:user_id>/apikeys/<int:key_id>", methods=["DELETE"])
+def panel_deactivate_apikey(user_id, key_id):
+    """Desactiva una API key (soft delete)."""
+    if not _auth(request):
+        return _fail_auth()
+    try:
+        ok = deactivate_api_key(key_id, user_id)
+        if not ok:
+            return jsonify({"error": "API key no encontrada"}), 404
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        logger.error(f"❌ panel/users/{user_id}/apikeys/{key_id} DELETE error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ─── GET /panel/audit ────────────────────────────────────────────────────────
+@panel_bp.route("/panel/audit", methods=["GET"])
+def panel_audit():
+    """Eventos recientes del audit_log."""
+    if not _auth(request):
+        return _fail_auth()
+    try:
+        level      = request.args.get("level")
+        event_type = request.args.get("event_type")
+        limit      = min(int(request.args.get("limit", 100)), 500)
+
+        events = get_recent_events(limit=limit, level=level, event_type=event_type)
+        return jsonify({"events": events}), 200
+    except Exception as e:
+        logger.error(f"❌ panel/audit error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ─── GET /panel/audit/errors ─────────────────────────────────────────────────
+@panel_bp.route("/panel/audit/errors", methods=["GET"])
+def panel_audit_errors():
+    """Errores y warnings recientes — para alertas críticas."""
+    if not _auth(request):
+        return _fail_auth()
+    try:
+        limit  = min(int(request.args.get("limit", 50)), 200)
+        events = get_error_events(limit=limit)
+        return jsonify({"events": events}), 200
+    except Exception as e:
+        logger.error(f"❌ panel/audit/errors error: {e}")
+        return jsonify({"error": str(e)}), 500
