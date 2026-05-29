@@ -304,3 +304,30 @@ Sesión 12 → Fase 3: tú + padre DEMO simultáneos con panel
 - Sesión 10 → #17a delays escalonados + reconciler por usuario
 - Sesión 11 → Panel MVP operativo
 - Sesión 12 → Fase 3: tú + padre DEMO simultáneos con panel
+
+## Sesión 11 — Roadmap actualizado v12
+
+### Orden sesiones actualizado
+Sesión 12 → Módulo usuarios + API keys cifradas + audit_log
+Sesión 13 → Alertas críticas + Telegram
+Sesión 14 → Panel módulo usuarios completo + balance BingX
+Sesión 15 → Fase 3 — tú + padre DEMO con panel completo
+Sesión 16 → PostgreSQL + backup BD
+Sesión 17 → Cloudflare + hardening seguridad
+Sesión 18 → Proxies + WebSocket
+Sesión 19 → Validación final multiusuario — romper en DEMO
+Sesión 20 → LIVE mínimo — solo tú, capital mínimo real
+
+### #17a delays escalonados — POSPUESTO indefinidamente
+- Es parche para Render free tier + HTTP polling
+- Solución definitiva es WebSocket
+- Sin evidencia de problema real en logs
+- Se revisa solo si aparece evidencia concreta antes de llegar a WebSocket
+
+### Filosofía de construcción hasta LIVE
+1. Robustez
+2. Trazabilidad
+3. Monitorización
+4. Seguridad
+5. Escalabilidad
+El rediseño visual y estadísticas avanzadas van después de todo lo anterior.
