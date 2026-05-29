@@ -7,9 +7,9 @@ import os
 import time
 from flask import Blueprint, jsonify, request
 from logs.logger import get_logger
-from data.database import get_db
-from data.state import get_all_states
-from core.emergency import is_emergency_active
+from data.database import get_conn, db_fetchall, db_fetchone
+from data.state import get_all_user_ids, get_state, get_all_positions
+from core.emergency import is_emergency
 
 logger = get_logger(__name__)
 panel_bp = Blueprint("panel", __name__)
@@ -40,24 +40,23 @@ def panel_status():
     # BD
     db_ok = False
     try:
-        db = get_db()
-        db.execute("SELECT 1")
+        get_conn().execute("SELECT 1")
         db_ok = True
     except Exception as e:
         logger.warning(f"⚠️ BD check failed: {e}")
 
-    # BingX — comprobamos importando el módulo
+    # BingX module
     bingx_ok = False
     try:
-        from brokers.bingx import get_balance
-        bingx_ok = True  # si importa, el módulo está listo
+        from brokers.bingx import ping_bingx
+        bingx_ok = True
     except Exception:
         pass
 
-    # Reconciler — miramos state
+    # Reconciler — si hay user_ids en memoria el reconciler está vivo
     reconciler_ok = False
     try:
-        states = get_all_states()
+        get_all_user_ids()
         reconciler_ok = True
     except Exception:
         pass
@@ -65,7 +64,7 @@ def panel_status():
     # Emergency global
     emergency = False
     try:
-        emergency = is_emergency_active(robot="global")
+        emergency = is_emergency()
     except Exception:
         pass
 
@@ -88,47 +87,45 @@ def panel_users():
 
     result = []
     try:
-        db = get_db()
-
-        # Usuarios activos
-        users = db.execute(
+        users = db_fetchall(
             "SELECT id, name, email, plan, env, active FROM users WHERE active = 1"
-        ).fetchall()
+        )
 
-        # State en memoria por user_id
-        states = get_all_states()
+        user_ids = get_all_user_ids()
 
         for u in users:
-            uid = u["id"]
-            user_state = states.get(str(uid), {})
-
+            uid = str(u["id"])
             bots = []
-            for symbol, sym_state in user_state.items():
-                bots.append({
-                    "symbol": symbol,
-                    "side": sym_state.get("side", "NONE"),
-                    "pyramid_count": sym_state.get("pyramid_count", 0),
-                    "emergency": sym_state.get("emergency", False),
-                    "last_signal": sym_state.get("last_signal", None),
-                })
 
-            # Última operación de BD
-            last_trade = db.execute(
+            if uid in user_ids:
+                st = get_state(uid)
+                positions = st.get("positions", {})
+                for symbol, pos in positions.items():
+                    if pos.get("long") or pos.get("short"):
+                        bots.append({
+                            "symbol":        symbol,
+                            "side":          "LONG" if pos.get("long") else "SHORT",
+                            "pyramid_count": pos.get("pyramid_long_count", 0) if pos.get("long") else pos.get("pyramid_short_count", 0),
+                            "emergency":     st.get("emergency", False),
+                            "last_signal":   st.get("last_signal"),
+                        })
+
+            last_trade = db_fetchone(
                 """SELECT signal, symbol, side, timestamp
                    FROM trades
                    WHERE user_id = ?
                    ORDER BY timestamp DESC LIMIT 1""",
-                (str(uid),)
-            ).fetchone()
+                (uid,)
+            )
 
             result.append({
-                "id": uid,
-                "name": u["name"],
-                "email": u["email"],
-                "plan": u["plan"],
-                "env": u["env"],
-                "active": bool(u["active"]),
-                "bots": bots,
+                "id":         u["id"],
+                "name":       u["name"],
+                "email":      u["email"],
+                "plan":       u["plan"],
+                "env":        u["env"],
+                "active":     bool(u["active"]),
+                "bots":       bots,
                 "last_trade": dict(last_trade) if last_trade else None,
             })
 
@@ -148,38 +145,35 @@ def panel_alerts():
 
     alerts = []
     try:
-        db = get_db()
-
-        # Últimos trades con resultado error o warning
-        trades = db.execute(
+        trades = db_fetchall(
             """SELECT user_id, robot_id, symbol, signal, result, timestamp
                FROM trades
                WHERE result IN ('error', 'warning', 'failed')
                ORDER BY timestamp DESC LIMIT 20"""
-        ).fetchall()
+        )
 
         for t in trades:
             alerts.append({
-                "type": "trade_error",
-                "user_id": t["user_id"],
-                "robot_id": t["robot_id"],
-                "symbol": t["symbol"],
-                "signal": t["signal"],
-                "result": t["result"],
+                "type":      "trade_error",
+                "user_id":   t["user_id"],
+                "robot_id":  t["robot_id"],
+                "symbol":    t["symbol"],
+                "signal":    t["signal"],
+                "result":    t["result"],
                 "timestamp": t["timestamp"],
             })
 
-        # States con emergency activo
-        states = get_all_states()
-        for uid, user_state in states.items():
-            for symbol, sym_state in user_state.items():
-                if sym_state.get("emergency"):
-                    alerts.append({
-                        "type": "emergency",
-                        "user_id": uid,
-                        "symbol": symbol,
-                        "timestamp": None,
-                    })
+        # Emergency activos en memoria
+        for uid in get_all_user_ids():
+            st = get_state(uid)
+            if st.get("emergency"):
+                alerts.append({
+                    "type":      "emergency",
+                    "user_id":   uid,
+                    "symbol":    st.get("position_symbol", "—"),
+                    "result":    "emergency",
+                    "timestamp": None,
+                })
 
     except Exception as e:
         logger.error(f"❌ panel/alerts error: {e}")
