@@ -150,3 +150,26 @@ PANEL (Render free — puede dormirse)
   → Solo UX — consume API de CENTRAL
   → Si se duerme → CENTRAL sigue solo
 ```
+
+## Sesión 11 — Panel MVP desplegado
+
+### Nuevo servicio — central-bots-panel
+- Tipo: Static Site en Render
+- Repo: central-bots-panel (GitHub)
+- Deploy automático en push a main
+- No requiere variables de entorno — PANEL_SECRET_TOKEN lo introduce el admin en login
+- URL: https://central-bots-panel.onrender.com
+
+### central-bots-api-1 — cambios sesión 11
+- flask-cors añadido a requirements.txt
+- CORS habilitado solo para /panel/* con origen restringido al panel
+- PANEL_SECRET_TOKEN añadido como variable de entorno en Render
+- Blueprint panel_bp registrado en app.py
+- panel_api.py añadido en /routes/
+
+### Estructura repo central-bots-panel
+index.html      → portada con login
+panel.html      → panel de control
+config.js       → URL base del middleware (apunta a central-bots-api-1)
+js/auth.js      → lógica login y validación contra middleware
+js/panel.js     → lógica panel — carga status, users, alerts cada 30s
