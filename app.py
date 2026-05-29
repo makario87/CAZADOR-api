@@ -3,6 +3,7 @@ app.py
 Arranque principal del sistema CAZADOR → Python → BingX.
 """
 from flask import Flask, jsonify
+from flask_cors import CORS
 from config.settings import DEMO_MODE, validate
 from routes.webhook import webhook_bp
 from routes.panel_api import panel_bp
@@ -36,6 +37,13 @@ logger = get_logger(__name__)
 # 🚀 CREAR APP FLASK
 # ============================================================
 app = Flask(__name__)
+
+CORS(app, resources={
+    r"/panel/*": {
+        "origins": "https://central-bots-panel.onrender.com"
+    }
+})
+
 app.register_blueprint(webhook_bp)
 app.register_blueprint(panel_bp)
 
