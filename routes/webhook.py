@@ -61,6 +61,37 @@ def receive_signal():
         }), 400
         
     signal = payload.get("signal", "UNKNOWN")
+    latency = None
+
+    try:
+        from datetime import datetime, timezone
+    
+        tv_time_str = payload.get("time", "")
+    
+        if tv_time_str:
+    
+            tv_time = datetime.fromisoformat(
+                tv_time_str.replace("Z", "+00:00")
+            )
+    
+            now_utc = datetime.now(timezone.utc)
+    
+            latency = round(
+                (now_utc - tv_time).total_seconds(),
+                2
+            )
+    
+            logger.info(
+                f"📡 TV→Render latency={latency}s | "
+                f"signal={signal} | "
+                f"symbol={payload.get('symbol')}"
+            )
+    
+    except Exception as e:
+    
+        logger.debug(
+            f"⚠️ No se pudo calcular latencia: {e}"
+        )
 
     if "signal" not in payload:
         record_webhook("MISSING_SIGNAL", ok=False)
@@ -71,7 +102,8 @@ def receive_signal():
             f"⏰ Señal EXPIRADA y descartada: "
             f"{signal} | "
             f"symbol={payload.get('symbol')} | "
-            f"tv_time={payload.get('time')}"
+            f"tv_time={payload.get('time')} | "
+            f"latency={latency}s"
         )
     
         record_webhook(signal + "_EXPIRED", ok=False)
