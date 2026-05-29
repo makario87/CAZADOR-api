@@ -10,6 +10,11 @@ from logs.logger import get_logger
 from data.database import get_conn, db_fetchall, db_fetchone
 from data.state import get_all_user_ids, get_state, get_all_positions
 from core.emergency import is_emergency
+from data.users    import (create_user, get_user, get_all_users,
+                           update_user, deactivate_user, get_users_summary)
+from data.api_keys import (add_api_key, list_api_keys,
+                           deactivate_api_key, has_active_api_key)
+from data.audit    import get_recent_events, get_error_events
 
 logger = get_logger(__name__)
 panel_bp = Blueprint("panel", __name__)
