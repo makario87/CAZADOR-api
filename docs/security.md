@@ -155,3 +155,17 @@ config/settings.py    WEBHOOK_REQUIRED_FIELDS, DEDUP_WINDOW_SEC
 - Usuarios, API Keys, saldos, trades y estados viven exclusivamente en BD
 - API Keys se almacenarán cifradas AES-256 — implementar en sesión 12
 - Ningún secret aparece en logs — política MASKED obligatoria para todo el proyecto
+
+## Sesión 12 — API keys cifradas AES-256-GCM
+
+### crypto.py
+- Cifrado AES-256-GCM para API keys almacenadas en BD
+- MASTER_ENCRYPTION_KEY — única variable crítica en Render, nunca en código ni GitHub
+- Formato BD: base64(nonce[12] + tag[16] + ciphertext)
+- Fallo ruidoso si MASTER_ENCRYPTION_KEY no configurada o inválida
+- mask() para enmascarar valores sensibles en logs y audit_log
+- Secret nunca aparece en logs ni en audit_log — solo key_masked
+
+### Riesgo documentado para producción
+Si MASTER_ENCRYPTION_KEY se pierde o cambia, las API keys cifradas quedan inutilizables.
+Pendiente antes de producción: backup oficial, procedimiento de recuperación, rotación controlada.
