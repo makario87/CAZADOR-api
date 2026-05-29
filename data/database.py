@@ -134,6 +134,40 @@ CREATE TABLE IF NOT EXISTS proxies (
     active  INTEGER NOT NULL DEFAULT 1
 );
 
+-- ── Tokens por ecosistema de robot ───────────────────────
+CREATE TABLE IF NOT EXISTS tokens (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT    NOT NULL UNIQUE,
+    secret      TEXT    NOT NULL,
+    active      INTEGER NOT NULL DEFAULT 1,
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ── Relación robot ↔ token (sin tocar tabla robots existente) ──
+CREATE TABLE IF NOT EXISTS robot_tokens (
+    robot_id    TEXT    NOT NULL PRIMARY KEY,
+    token_id    INTEGER NOT NULL REFERENCES tokens(id),
+    active      INTEGER NOT NULL DEFAULT 1
+);
+
+-- ── Audit log ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS audit_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp   TEXT    NOT NULL DEFAULT (datetime('now')),
+    user_id     TEXT,
+    robot_id    TEXT,
+    symbol      TEXT,
+    event_type  TEXT    NOT NULL,
+    level       TEXT    NOT NULL DEFAULT 'INFO',
+    detail      TEXT,
+    ip          TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_timestamp  ON audit_log(timestamp);
+CREATE INDEX IF NOT EXISTS idx_audit_user       ON audit_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_event_type ON audit_log(event_type);
+CREATE INDEX IF NOT EXISTS idx_audit_level      ON audit_log(level);
+
 """
 
 
