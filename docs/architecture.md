@@ -179,3 +179,47 @@ TV no controla riesgo, pirámide ni exposición real.
 Python consulta BingX real para tomar decisiones.
 BingX es la verdad absoluta sobre existencia de posición.
 
+## Sesión 11 — Panel MVP + decisiones arquitectónicas
+
+### Panel MVP — arquitectura definitiva
+- Panel en servicio Render separado (central-bots-panel) — Static Site
+- Panel nunca toca BD ni BingX directamente
+- Todo pasa por el middleware via API con header X-Panel-Token
+- Si el panel cae, el middleware sigue operando sin interrupciones
+- Comunicación: panel → GET /panel/status|users|alerts → middleware → SQLite
+
+### Suscripción por robot — decisión definitiva
+- subscriptions = user_id + robot_id + config (sin símbolo)
+- El símbolo siempre viene de TradingView en tiempo real
+- Cambiar activo del robot no requiere tocar subscriptions de usuarios
+- Un token por ecosistema de robot (TOKEN_CAZADOR para CAZADOR_A/B/C/D)
+- robot_id identifica la instancia concreta dentro del ecosistema
+
+### Tokens por ecosistema — arquitectura definitiva
+- Tabla tokens: id, secret cifrado, active
+- Tabla robots: id, token_id (FK), name, active
+- Token valida el ecosistema — robot_id identifica la instancia
+- Nuevo robot hereda token automáticamente sin tocar configuración
+
+### Capital de CAZADOR — decisión definitiva
+- El balance de las API keys registradas ES el capital oficial de CAZADOR
+- No requiere validación técnica de subcuenta
+- Cliente declara capital asignado — sistema compara con balance real BingX
+- Margen de tolerancia por fluctuación USDT (PnL abierto, fees, funding)
+- Subcuentas BingX validadas manualmente — arquitectura viable
+
+### Principio irrevocable — entrada en LIVE
+No se entra en LIVE por calendario ni por sesiones acumuladas.
+Se entra únicamente cuando todas estas preguntas tienen respuesta SÍ:
+- ¿Podemos crear y gestionar usuarios reales?
+- ¿Podemos almacenar API Keys de forma segura?
+- ¿Podemos reconstruir cualquier incidencia mediante audit_log?
+- ¿Podemos detectar fallos críticos automáticamente?
+- ¿Podemos recibir alertas críticas en tiempo real?
+- ¿Podemos recuperar el sistema tras una caída?
+- ¿Podemos hacer backups y restauraciones?
+- ¿Podemos monitorizar usuarios y robots desde el panel?
+- ¿Hemos validado el sistema en DEMO con varios usuarios?
+- ¿Hemos intentado romper el sistema y ha sobrevivido?
+Si alguna respuesta es NO → seguimos en DEMO.
+LIVE es la consecuencia de una plataforma validada, no una fase de pruebas.
