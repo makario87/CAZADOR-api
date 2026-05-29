@@ -223,3 +223,18 @@ Se entra únicamente cuando todas estas preguntas tienen respuesta SÍ:
 - ¿Hemos intentado romper el sistema y ha sobrevivido?
 Si alguna respuesta es NO → seguimos en DEMO.
 LIVE es la consecuencia de una plataforma validada, no una fase de pruebas.
+
+
+## Sesión 12 — Nuevos módulos
+
+- utils/crypto.py — AES-256-GCM, MASTER_ENCRYPTION_KEY desde Render
+- data/audit.py   — audit_log, best-effort, nunca interrumpe operación principal
+- data/users.py   — CRUD usuarios con auditoría integrada, soft delete siempre
+- data/api_keys.py — gestión API keys cifradas, separación get/list (broker vs panel)
+
+Nuevas tablas BD:
+- tokens      — ecosistemas de robot
+- robot_tokens — relación robot_id TEXT ↔ token_id sin tocar tabla robots
+- audit_log   — trazabilidad completa con índices optimizados
+
+Deuda documentada: transición WEBHOOK_SECRET_TOKEN → tokens BD (sesión futura).
