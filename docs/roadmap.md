@@ -331,3 +331,14 @@ Sesión 20 → LIVE mínimo — solo tú, capital mínimo real
 4. Seguridad
 5. Escalabilidad
 El rediseño visual y estadísticas avanzadas van después de todo lo anterior.
+
+## Sesión 12 — COMPLETADA
+
+Módulo usuarios + API keys cifradas + audit_log implementados y validados en QA.
+
+Tres preguntas del principio irrevocable respondidas afirmativamente:
+- ¿Podemos crear y gestionar usuarios reales? ✅ SÍ
+- ¿Podemos almacenar API Keys de forma segura? ✅ SÍ
+- ¿Podemos reconstruir cualquier incidencia mediante audit_log? ✅ SÍ
+
+Siguiente sesión 13: Alertas críticas + Telegram.
