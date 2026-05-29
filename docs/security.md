@@ -132,3 +132,26 @@ config/settings.py    WEBHOOK_REQUIRED_FIELDS, DEDUP_WINDOW_SEC
 ### Tokens rotados
 - WEBHOOK_SECRET_TOKEN rotado — TradingView actualizado
 - INTERNAL_TEST_TOKEN configurado nuevo en Render
+
+## Sesión 11 — Panel MVP + token MASKED
+
+### Token webhook MASKED en logs
+- RAW BODY loguea token enmascarado con regex antes de escribir en log
+- JSON PARSED loguea safe_payload con token="MASKED"
+- El token nunca aparece en logs de Render en ningún formato
+- Aplica a todas las señales recibidas por el webhook
+
+### Panel MVP — seguridad
+- PANEL_SECRET_TOKEN en Render — nunca en código ni en GitHub
+- Header X-Panel-Token obligatorio en todos los endpoints /panel/*
+- Sin token válido → 401 inmediato sin datos
+- CORS restringido exclusivamente a https://central-bots-panel.onrender.com
+- Webhook no necesita CORS — es server-to-server, no navegador
+- sessionStorage MVP — deuda técnica: cookies httpOnly + sesiones server-side en iteración futura
+
+### Norma permanente del proyecto
+- GitHub contiene únicamente código y documentación
+- Ningún dato real de clientes en GitHub bajo ningún concepto
+- Usuarios, API Keys, saldos, trades y estados viven exclusivamente en BD
+- API Keys se almacenarán cifradas AES-256 — implementar en sesión 12
+- Ningún secret aparece en logs — política MASKED obligatoria para todo el proyecto
