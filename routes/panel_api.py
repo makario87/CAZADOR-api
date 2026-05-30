@@ -10,10 +10,16 @@ from logs.logger import get_logger
 from data.database import get_conn, db_fetchall, db_fetchone
 from data.state import get_all_user_ids, get_state, get_all_positions
 from core.emergency import is_emergency
+from brokers.bingx import get_balance_for_user
 from data.users    import (create_user, get_user, get_all_users,
                            update_user, deactivate_user, get_users_summary)
-from data.api_keys import (add_api_key, list_api_keys,
-                           deactivate_api_key, has_active_api_key)
+from data.api_keys import (
+    add_api_key,
+    list_api_keys,
+    deactivate_api_key,
+    has_active_api_key,
+    get_api_key
+)
 from data.audit    import get_recent_events, get_error_events
 
 logger = get_logger(__name__)
@@ -377,4 +383,68 @@ def panel_audit_errors():
         return jsonify({"events": events}), 200
     except Exception as e:
         logger.error(f"❌ panel/audit/errors error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ─── GET /panel/users/<id>/balance ───────────────────────────────────────────
+@panel_bp.route("/panel/users/<int:user_id>/balance", methods=["GET"])
+def panel_user_balance(user_id):
+    """
+    Consulta balance BingX real del usuario.
+    Descifra sus keys, llama a BingX con ellas, devuelve balance/equity/margen.
+    Nunca expone keys en la respuesta.
+    """
+    if not _auth(request):
+        return _fail_auth()
+
+    import time as _time
+
+    try:
+        user = get_user(user_id)
+        if not user:
+            return jsonify({"error": "Usuario no encontrado"}), 404
+
+        env      = user.get("env", "demo")
+        api_data = get_api_key(user_id, exchange="bingx", env=env)
+
+        if not api_data:
+            return jsonify({
+                "error":    "Sin API key activa",
+                "env":      env,
+                "source":   "bingx",
+                "last_update": int(_time.time())
+            }), 404
+
+        # Seleccionar base_url según env del usuario
+        if env == "live":
+            base_url = "https://open-api.bingx.com"
+        else:
+            base_url = "https://open-api-vst.bingx.com"
+
+        result = get_balance_for_user(
+            api_key    = api_data["key"],
+            api_secret = api_data["secret"],
+            base_url   = base_url,
+        )
+
+        if "error" in result:
+            return jsonify({
+                "error":       result["error"],
+                "env":         env,
+                "source":      "bingx",
+                "last_update": int(_time.time())
+            }), 502
+
+        return jsonify({
+            "balance":          result["balance"],
+            "equity":           result["equity"],
+            "available_margin": result["available_margin"],
+            "used_margin":      result["used_margin"],
+            "env":              env,
+            "source":           "bingx",
+            "last_update":      int(_time.time())
+        }), 200
+
+    except Exception as e:
+        logger.error(f"❌ panel/users/{user_id}/balance error: {e}")
         return jsonify({"error": str(e)}), 500
