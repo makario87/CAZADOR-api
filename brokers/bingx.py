@@ -657,3 +657,61 @@ def close_position(
 def close_all_positions(symbol: str, side: str, robot: str = "") -> dict:
     """side aquí es positionSide: LONG | SHORT"""
     return close_position(symbol=symbol, position_side=side, robot=robot)
+
+
+# ============================================================
+# 💰 BALANCE POR USUARIO — keys propias (no las de entorno)
+# ============================================================
+
+def get_balance_for_user(api_key: str, api_secret: str, base_url: str) -> dict:
+    """
+    Consulta balance BingX usando las keys específicas de un usuario.
+    Independiente de get_balance() — no toca keys de entorno.
+    Uso exclusivo del endpoint /panel/users/<id>/balance.
+
+    Devuelve dict con balance, equity, available_margin, used_margin
+    o dict con 'error' si falla.
+    """
+    import time as _time
+
+    def _bq(params: dict) -> str:
+        sorted_qs = "&".join(f"{k}={v}" for k, v in sorted(params.items()))
+        return sorted_qs + "&timestamp=" + str(now_ms())
+
+    def _bs(query_string: str) -> str:
+        return hmac.new(
+            api_secret.encode("utf-8"),
+            query_string.encode("utf-8"),
+            hashlib.sha256
+        ).hexdigest()
+
+    try:
+        params = {"currency": "USDT"}
+        qs  = _bq(params)
+        sig = _bs(qs)
+        url = f"{base_url}/openApi/swap/v2/user/balance?{qs}&signature={sig}"
+        headers = {"X-BX-APIKEY": api_key}
+
+        response = requests.get(url, headers=headers, timeout=ORDER_TIMEOUT)
+        data     = response.json()
+
+        if data.get("code") != 0:
+            return {
+                "error": f"BingX error code={data.get('code')} msg={data.get('msg')}"
+            }
+
+        bal = data.get("data", {}).get("balance", {})
+        return {
+            "balance":          float(bal.get("balance",         0) or 0),
+            "equity":           float(bal.get("equity",          0) or 0),
+            "available_margin": float(bal.get("availableMargin", 0) or 0),
+            "used_margin":      float(bal.get("freezedMargin",   0) or 0),
+        }
+
+    except requests.exceptions.Timeout:
+        return {"error": "timeout"}
+    except requests.exceptions.ConnectionError:
+        return {"error": "connection_error"}
+    except Exception as e:
+        logger.error(f"❌ get_balance_for_user — excepción: {e}")
+        return {"error": str(e)}
