@@ -448,3 +448,30 @@ def panel_user_balance(user_id):
     except Exception as e:
         logger.error(f"❌ panel/users/{user_id}/balance error: {e}")
         return jsonify({"error": str(e)}), 500
+
+# ─── POST /panel/login ───────────────────────────────────────────────────────
+@panel_bp.route("/panel/login", methods=["POST"])
+def panel_login():
+    """
+    Valida credenciales del panel.
+    No requiere token previo — es el endpoint público de autenticación.
+    Devuelve ok:true si las credenciales son correctas.
+    """
+    try:
+        data     = request.get_json(force=True) or {}
+        username = data.get("username", "").strip()
+        password = data.get("password", "").strip()
+
+        if not username or not password:
+            return jsonify({"ok": False, "error": "Credenciales requeridas"}), 400
+
+        if username == "admin" and password == PANEL_TOKEN:
+            logger.info(f"✅ Login panel correcto — user={username}")
+            return jsonify({"ok": True}), 200
+        else:
+            logger.warning(f"⚠️ Login panel fallido — user={username}")
+            return jsonify({"ok": False, "error": "Credenciales incorrectas"}), 401
+
+    except Exception as e:
+        logger.error(f"❌ panel/login error: {e}")
+        return jsonify({"error": str(e)}), 500
